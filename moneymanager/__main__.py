@@ -186,6 +186,7 @@ def prompt_confirmation(bind_table: dict[int, AutoGroupRuleSets], new_matches: d
 @app.command()
 def categories(
     ctx: typer.Context,
+    show_empty: bool = typer.Option(False, help="Show categories with 0 transactions."),
     before: datetime | None = typer.Option(None),
     after: datetime | None = typer.Option(None),
 ):
@@ -207,11 +208,15 @@ def categories(
             table.add_column("nb", justify="right")
 
         for group in _groups:
+            value = sum(tr.amount for tr in filter(group.transactions.all()))
+            number = len(list(filter(group.transactions.all())))
+            if number == 0 and not show_empty:  # value is 0 if number is 0
+                continue
+
             bold = "[b]" if group.subgroups else ""
             leaf = tree.add(f"{bold}{group.name}")
 
-            value = sum(tr.amount for tr in filter(group.transactions.all()))
-            table.add_row(format_amount(value), str(len(list(filter(group.transactions.all())))))
+            table.add_row(format_amount(value), str(number))
             if group.subgroups:
                 build_tree_table(group.subgroups, leaf, table)
         return table, tree
