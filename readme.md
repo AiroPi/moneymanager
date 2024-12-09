@@ -1,5 +1,12 @@
 # Money Manager CLI
 
+### 0. Install moneymanager
+
+```bash
+pip install git+https://github.com/AiroPi/moneymanager.git
+```
+(Consider using a venv first)
+
 ### 1. Create a `groups.yml` file
 
 Example
@@ -94,6 +101,12 @@ initial_values:
 ```
 
 ### 4. Put all your exports in an `/exports` folder
+
+### 5. Make your own readers, or install the default ones from the repo
+
+```bash
+moneymanager install-default-readers
+```
 
 ### 5. Use the CLI
 

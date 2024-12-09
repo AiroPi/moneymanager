@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib import request
 
 import typer
 from pydantic_core import from_json, to_json
@@ -65,9 +66,12 @@ def common(
         Path("./accounts_settings.yml"), envvar="SETTINGS_PATH", help="Path to the account settings."
     ),
 ):
-    paths_options = PathsOptions(readers, exports, rules, groups, settings)
-    load_cache(paths_options)
-    parse_transactions(paths_options)
+    ctx.obj = PathsOptions(readers, exports, rules, groups, settings)
+
+
+def load(paths: PathsOptions):
+    load_cache(paths)
+    parse_transactions(paths)
 
 
 def load_cache(paths: PathsOptions):
@@ -123,7 +127,7 @@ def parse_transactions(paths: PathsOptions):
 
     prompt_confirmation(bind_table, new_matches)
 
-    with TRANSACTIONS_PATH.open("w") as f:
+    with TRANSACTIONS_PATH.open("w+") as f:
         f.write(Transactions(cache.transactions).model_dump_json(indent=4, by_alias=True))
     with ALREADY_PARSED_PATH.open("wb") as f:
         f.write(to_json(cache.already_parsed))
@@ -150,9 +154,11 @@ def prompt_confirmation(bind_table: dict[int, AutoGroupRuleSets], new_matches: d
 
 @app.command()
 def categories(
+    ctx: typer.Context,
     before: datetime | None = typer.Option(None),
     after: datetime | None = typer.Option(None),
 ):
+    load(ctx.obj)
     filter = filter_helper(before, after)
     console.print(Markdown("# By category"))
 
@@ -186,6 +192,8 @@ def categories(
 
 @app.command()
 def accounts(ctx: typer.Context):
+    load(ctx.obj)
+
     console.print(Markdown("# Accounts"))
     accounts_table = Table(show_header=True, header_style="bold", width=console.width)
     accounts_table.add_column("Bank")
@@ -214,9 +222,11 @@ def accounts(ctx: typer.Context):
 
 @app.command()
 def transactions(
+    ctx: typer.Context,
     before: datetime | None = typer.Option(None),
     after: datetime | None = typer.Option(None),
 ):
+    load(ctx.obj)
     filter = filter_helper(before, after)
 
     table = transactions_table(sorted(filter(cache.transactions), key=lambda tr: tr.date))
@@ -239,6 +249,22 @@ def transactions_table(transactions: Iterable[Transaction]):
     table.columns[4].footer = format_amount(total)
 
     return table
+
+
+@app.command()
+def install_default_readers(path: Path = Path("./readers")):
+    if not path.exists():
+        path.mkdir()
+
+    with request.urlopen("https://api.github.com/repos/AiroPi/moneymanager/contents/readers?ref=master") as response:
+        files = from_json(response.read())
+
+    for file in files:
+        with request.urlopen(file["download_url"]) as response, (path / file["name"]).open("wb+") as f:  # noqa: S310
+            f.write(response.read())
+        print(f"{file["name"]} downloaded successfully.")
+
+    print("Readers downloaded successfully.")
 
 
 if __name__ == "__main__":
