@@ -1,0 +1,11 @@
+/.venv
+draft
+exports
+__pycache__
+
+*.egg-info
+
+accounts_settings.yml
+auto_group.yml
+groups.yml
+data/
