@@ -19,6 +19,8 @@ class Cache:
     already_parsed: list[str]
     banks: ValuesIterDict[str, Bank]
 
+    debug_mode: bool = False
+
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if cls.instance is None:
             cls.instance = super().__new__(cls, *args, **kwargs)

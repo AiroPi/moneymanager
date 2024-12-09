@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated
 from urllib import request
 
@@ -66,8 +67,11 @@ def common(
     settings: Path = typer.Option(
         Path("./accounts_settings.yml"), envvar="SETTINGS_PATH", help="Path to the account settings."
     ),
+    debug: bool = typer.Option(False, help="Show some debug values"),
 ):
-    ctx.obj = PathsOptions(readers, exports, rules, groups, settings)
+    ctx.obj = SimpleNamespace(paths=PathsOptions(readers, exports, rules, groups, settings), debug=debug)
+    if debug:
+        cache.debug_mode = debug
 
 
 def load(paths: PathsOptions):
@@ -82,15 +86,33 @@ def load_cache(paths: PathsOptions):
     cache.accounts_settings = load_accounts_settings(paths.account_settings)
 
     cache.transactions = load_transactions(TRANSACTIONS_PATH)
-    cache.already_parsed = []
+    cache.already_parsed = load_already_parsed(ALREADY_PARSED_PATH)
+
+    if cache.debug_mode:
+        console.print(Markdown("# Banks"))
+        console.print(cache.banks)
+        console.print(Markdown("# Groups"))
+        console.print(cache.groups)
+        console.print(Markdown("# Grouping rules"))
+        console.print(cache.grouping_rules)
+        console.print(Markdown("# Accounts settings"))
+        console.print(cache.accounts_settings)
+        if Confirm.ask("Continue?"):
+            console.clear()
+        else:
+            raise SystemExit(0)
+
+
+def load_already_parsed(path: Path) -> list[str]:
+    if path.exists():
+        with path.open("rb") as f:
+            return from_json(f.read())
+    else:
+        return []
 
 
 def parse_transactions(paths: PathsOptions):
     readers: list[type[ReaderABC]] = load_readers(paths.readers)
-
-    if ALREADY_PARSED_PATH.exists():
-        with ALREADY_PARSED_PATH.open("rb") as f:
-            cache.already_parsed = from_json(f.read())
 
     for export_path in Path(paths.exports).glob("*"):
         if str(export_path.absolute()) in cache.already_parsed:
@@ -127,12 +149,15 @@ def parse_transactions(paths: PathsOptions):
                 new_matches.setdefault(id(grouping_rule), set()).add(transaction)
 
     prompt_confirmation(bind_table, new_matches)
+    save_data()
 
+
+def save_data():
     if not DATA_PATH.exists():
         DATA_PATH.mkdir()
 
     with TRANSACTIONS_PATH.open("w+") as f:
-        f.write(Transactions(cache.transactions).model_dump_json(indent=4, by_alias=True))
+        f.write(Transactions(cache.transactions).model_dump_json(by_alias=True))
     with ALREADY_PARSED_PATH.open("wb+") as f:
         f.write(to_json(cache.already_parsed))
 
@@ -162,7 +187,7 @@ def categories(
     before: datetime | None = typer.Option(None),
     after: datetime | None = typer.Option(None),
 ):
-    load(ctx.obj)
+    load(ctx.obj.paths)
     filter = filter_helper(before, after)
     console.print(Markdown("# By category"))
 
@@ -196,7 +221,7 @@ def categories(
 
 @app.command()
 def accounts(ctx: typer.Context):
-    load(ctx.obj)
+    load(ctx.obj.paths)
 
     console.print(Markdown("# Accounts"))
     accounts_table = Table(show_header=True, header_style="bold", width=console.width)
@@ -230,7 +255,7 @@ def transactions(
     before: datetime | None = typer.Option(None),
     after: datetime | None = typer.Option(None),
 ):
-    load(ctx.obj)
+    load(ctx.obj.paths)
     filter = filter_helper(before, after)
 
     table = transactions_table(sorted(filter(cache.transactions), key=lambda tr: tr.date))
