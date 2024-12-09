@@ -14,6 +14,8 @@ from pydantic_core import from_json, to_json
 from rich.columns import Columns
 from rich.console import Console, Group as RichGroup
 from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.pretty import Pretty
 from rich.prompt import Confirm
 from rich.table import Table
 from rich.text import Text
@@ -309,6 +311,22 @@ def reader_instructions(
         console.print("No instructions found for this reader.")
         return
     console.print(Markdown(reader.__doc__))
+
+
+@app.command(hidden=True)
+def debug_auto_group(ctx: typer.Context, transaction_id: str):
+    load(ctx.obj.paths)
+    transaction = next((t for t in cache.transactions if t.id == transaction_id), None)
+    if transaction is None:
+        raise ValueError("Transaction not found.")
+
+    console.print(Markdown(f"Testing against transaction {transaction_id}"))
+    console.print(Panel(Pretty(transaction)))
+
+    for i, grouping_rule in enumerate(cache.grouping_rules):
+        result = "[green]PASSED" if grouping_rule.test_match(transaction) else "[red]FAILED"
+        console.print(f"[bold]Test {i+1}/{len(cache.grouping_rules)} ({grouping_rule.group.name}): [/bold] {result}")
+        console.print(Panel(Pretty(grouping_rule.rules), title="Rules"))
 
 
 if __name__ == "__main__":

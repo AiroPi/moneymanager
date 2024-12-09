@@ -44,7 +44,7 @@ Example
       key: label
     - type: eq
       value: Crédit Mutuel
-      key: bank
+      key: bank_name
 - group: "01 avenue des Champs Elysée"
   rules:
   - type: startswith
@@ -52,7 +52,7 @@ Example
     key: label
   - type: eq
     value: Crédit Mutuel
-    key: bank
+    key: bank_name
 - group: Train
   rules:
   - type: icontains
