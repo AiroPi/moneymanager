@@ -77,12 +77,11 @@ def load_readers(readers_path: Path):
     readers: list[type[ReaderABC]] = []
 
     for reader_path in (readers_path).glob("*.py"):
-        spec = importlib.util.spec_from_file_location(str(reader_path), str(reader_path))
-        if not spec:
-            print(f"The file {reader_path} cannot be imported.")
+        try:
+            module = get_reader(reader_path)
+        except ValueError as e:
+            print(e)
             continue
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore
 
         try:
             export: Callable[[], Any] = getattr(module, "export")
@@ -97,6 +96,16 @@ def load_readers(readers_path: Path):
         readers.extend(exported)
 
     return readers
+
+
+def get_reader(path: Path):
+    spec = importlib.util.spec_from_file_location(str(path), str(path))
+    if not spec:
+        raise ValueError(f"The file {path} cannot be imported.")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore
+
+    return module
 
 
 def detect_reader(readers: list[type[ReaderABC]], file: io.BufferedReader) -> ReaderABC | None:

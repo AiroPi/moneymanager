@@ -1,5 +1,5 @@
 """
-Export instructions:
+# Export instructions
 
 - install the "pytr" python module
 - use the commande "pytr dl_docs *path*

@@ -1,5 +1,5 @@
 """
-Export instructions:
+# Export instructions
 
 - Connect to https://boursobank.com
 - Go to https://clients.boursobank.com/operations/generate

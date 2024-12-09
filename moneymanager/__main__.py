@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from urllib import request
 
 import typer
@@ -27,6 +27,7 @@ from moneymanager import (
     load_groups,
     load_readers,
 )
+from moneymanager.reader import get_reader
 from moneymanager.transaction import Transactions, load_transactions
 from moneymanager.utils import ValuesIterDict, format_amount
 
@@ -268,6 +269,21 @@ def install_default_readers(path: Path = Path("./readers")):
         print(f"{file["name"]} downloaded successfully.")
 
     print("Readers downloaded successfully.")
+
+
+@app.command()
+def reader_instructions(
+    reader_path: Annotated[Path, typer.Argument(help="The reader you want instruction from.")],
+):
+    try:
+        reader = get_reader(reader_path)
+    except ValueError:
+        console.print_exception()
+        return
+    if reader.__doc__ is None:
+        console.print("No instructions found for this reader.")
+        return
+    console.print(Markdown(reader.__doc__))
 
 
 if __name__ == "__main__":

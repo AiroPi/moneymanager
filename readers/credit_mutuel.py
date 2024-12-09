@@ -1,5 +1,5 @@
 """
-Export instructions:
+# Export instructions
 
 - Connect to https://www.creditmutuel.fr/
 - Go to https://www.creditmutuel.fr/fr/banque/budget.html#/pfm/transactions
