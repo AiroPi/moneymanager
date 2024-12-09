@@ -127,9 +127,12 @@ def parse_transactions(paths: PathsOptions):
 
     prompt_confirmation(bind_table, new_matches)
 
+    if not DATA_PATH.exists():
+        DATA_PATH.mkdir()
+
     with TRANSACTIONS_PATH.open("w+") as f:
         f.write(Transactions(cache.transactions).model_dump_json(indent=4, by_alias=True))
-    with ALREADY_PARSED_PATH.open("wb") as f:
+    with ALREADY_PARSED_PATH.open("wb+") as f:
         f.write(to_json(cache.already_parsed))
 
 
