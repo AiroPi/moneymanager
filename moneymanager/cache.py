@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any, Self
 if TYPE_CHECKING:
     from .account import Bank
     from .accounts_settings import AccountsSettings
-    from .group import AutoGroupRuleSets, Groups
-    from .transaction import Transaction
+    from .group import AutoGroupRuleSets, GroupBinds, Groups
+    from .transaction import Transactions
     from .utils import ValuesIterDict
 
 
@@ -15,9 +15,10 @@ class Cache:
     groups: Groups
     grouping_rules: list[AutoGroupRuleSets]
     accounts_settings: AccountsSettings
-    transactions: set[Transaction]
+    transactions: Transactions
     already_parsed: list[str]
     banks: ValuesIterDict[str, Bank]
+    group_binds: GroupBinds
 
     debug_mode: bool = False
 

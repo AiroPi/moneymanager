@@ -1,23 +1,25 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, PrivateAttr
 
 from .cache import cache
-from .utils import TransactionsAccessor, ValuesIterDict
+from .utils import ValuesIterDict
+
+if TYPE_CHECKING:
+    from .transaction import Transaction
 
 
 class Bank(BaseModel):
     name: str
     accounts: ValuesIterDict[str, Account] = Field(default_factory=ValuesIterDict)
 
-    def model_post_init(self, _: Any) -> None:
-        self._transactions = TransactionsAccessor(self, "accounts")
-
     @property
-    def transactions(self):
-        return self._transactions
+    def transactions(self) -> Iterator[Transaction]:
+        for account in self.accounts:
+            yield from account.transactions
 
     def add_account(self, account: Account):
         self.accounts[account.name] = account
@@ -27,9 +29,7 @@ class Bank(BaseModel):
 class Account(BaseModel):
     name: str
     _bank: Bank = PrivateAttr()
-
-    def model_post_init(self, _: Any) -> None:
-        self._transactions = TransactionsAccessor(self)
+    _transactions: set[Transaction] = PrivateAttr(default_factory=set)
 
     @property
     def alias(self) -> str:

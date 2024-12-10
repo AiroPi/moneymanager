@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, Field, PrivateAttr, RootModel
 
 from .account import Account, Bank
 from .cache import cache
+from .group import GroupBind
 
 if TYPE_CHECKING:
     from .group import Group
@@ -22,7 +23,7 @@ class Transaction(BaseModel):
     label: str
     date: datetime
     fee: Decimal | None = None
-    groups_names: set[str] = Field(default_factory=set)
+    _binds: set[GroupBind] = PrivateAttr(default_factory=set)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -40,11 +41,14 @@ class Transaction(BaseModel):
 
     @property
     def groups(self) -> list[Group]:
-        return [cache.groups[group_name] for group_name in self.groups_names]
+        return [bind.group for bind in self._binds]
 
-    def bind_group(self, group: Group) -> None:
-        self.groups_names.add(group.name)
-        group.transactions.add(self)
+    def bind_group(self, group: Group, type: Literal["manual", "auto"]) -> None:
+        cache.group_binds.new(self, group, type)
+
+    @property
+    def binds(self) -> set[GroupBind]:
+        return self._binds
 
     @property
     def bank(self) -> Bank:
@@ -55,18 +59,32 @@ class Transaction(BaseModel):
         return self.bank.accounts[self.account_name]
 
 
-class Transactions(RootModel[set[Transaction]]): ...
+class Transactions(RootModel[set[Transaction]]):
+    _mapped: dict[str, Transaction] = PrivateAttr(default_factory=dict)
+
+    def __iter__(self):  # type: ignore
+        return iter(self.root)
+
+    def model_post_init(self, _: Any) -> None:
+        for transaction in self.root:
+            self._mapped[transaction.id] = transaction
+
+    def get(self, key: str) -> Transaction | None:
+        return self._mapped.get(key)
+
+    def add(self, value: Transaction):
+        self._mapped[value.id] = value
+        self.root.add(value)
+
+    def __getitem__(self, key: str) -> Transaction:
+        return self._mapped[key]
 
 
-def load_transactions(path: Path) -> set[Transaction]:
+def load_transactions(path: Path) -> Transactions:
     if not path.exists():
-        return set()
+        return Transactions(set())
 
     with path.open(encoding="utf-8") as f:
         transactions = Transactions.model_validate_json(f.read())
 
-    for transaction in transactions.root:
-        for group in transaction.groups:
-            group.transactions.add(transaction)
-
-    return transactions.root
+    return transactions

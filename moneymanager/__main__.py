@@ -30,8 +30,9 @@ from moneymanager import (
     load_groups,
     load_readers,
 )
+from moneymanager.group import GroupBind, load_binds
 from moneymanager.reader import get_reader
-from moneymanager.transaction import Transactions, load_transactions
+from moneymanager.transaction import load_transactions
 from moneymanager.utils import ValuesIterDict, format_amount
 
 if TYPE_CHECKING:
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
 DATA_PATH = Path("./data")
 TRANSACTIONS_PATH = DATA_PATH / "transactions.json"
 ALREADY_PARSED_PATH = DATA_PATH / "already_parsed_exports.json"
+GROUP_BINDS = DATA_PATH / "group_binds.json"
 
 app = typer.Typer()
 console = Console()
@@ -79,6 +81,8 @@ def common(
 def load(paths: PathsOptions):
     load_cache(paths)
     parse_transactions(paths)
+    do_auto_grouping()
+    save_data()
 
 
 def load_cache(paths: PathsOptions):
@@ -89,6 +93,7 @@ def load_cache(paths: PathsOptions):
 
     cache.transactions = load_transactions(TRANSACTIONS_PATH)
     cache.already_parsed = load_already_parsed(ALREADY_PARSED_PATH)
+    cache.group_binds = load_binds(GROUP_BINDS)
 
     if cache.debug_mode:
         console.print(Markdown("# Banks"))
@@ -140,47 +145,55 @@ def parse_transactions(paths: PathsOptions):
 
         cache.already_parsed.append(str(export_path.absolute()))
 
-    bind_table: dict[int, AutoGroupRuleSets] = {}
-    new_matches: dict[int, set[Transaction]] = {}
-    for transaction in cache.transactions:
-        for grouping_rule in cache.grouping_rules:
-            if grouping_rule.group in transaction.groups:
-                continue
-            if grouping_rule.test_match(transaction):
-                bind_table.setdefault(id(grouping_rule), grouping_rule)
-                new_matches.setdefault(id(grouping_rule), set()).add(transaction)
 
-    prompt_confirmation(bind_table, new_matches)
-    save_data()
+def do_auto_grouping():
+    for grouping_rule in cache.grouping_rules:
+        matches: set[GroupBind] = set()
+        for transaction in cache.transactions:
+            if grouping_rule.test_match(transaction):
+                matches.add(GroupBind.from_objects(transaction, grouping_rule.group, "auto"))
+        prompt_confirmation(grouping_rule, matches)
+
+
+
+def prompt_confirmation(grouping_rule: AutoGroupRuleSets, matches: set[GroupBind]):
+    already_added = {bind for bind in grouping_rule.group.binds if bind.type == "auto"}
+    removed = already_added - matches
+    added = matches - already_added
+
+    if not (removed or added):
+        return
+
+    console.print(
+        f"[bold]:warning: Auto grouping detected some changes for the group [underline]{grouping_rule.group.name}!"
+    )
+
+    if removed:
+        table = transactions_table(bind.transaction for bind in removed)
+        console.print("The following elements will be unassigned:")
+        console.print(table)
+    if added:
+        table = transactions_table(bind.transaction for bind in added)
+        console.print("The following elements will be assigned:")
+        console.print(table)
+
+    if Confirm.ask("Confirm ?"):
+        for bind in added:
+            cache.group_binds.add(bind)
+        for bind in removed:
+            cache.group_binds.remove(bind)
 
 
 def save_data():
     if not DATA_PATH.exists():
         DATA_PATH.mkdir()
 
-    with TRANSACTIONS_PATH.open("w+") as f:
-        f.write(Transactions(cache.transactions).model_dump_json(by_alias=True))
+    with TRANSACTIONS_PATH.open("wb+") as f:
+        f.write(to_json(cache.transactions, by_alias=True))
     with ALREADY_PARSED_PATH.open("wb+") as f:
         f.write(to_json(cache.already_parsed))
-
-
-def prompt_confirmation(bind_table: dict[int, AutoGroupRuleSets], new_matches: dict[int, set[Transaction]]):
-    if new_matches:
-        console.print("Auto groups matched new transactions !")
-    for id_, transactions in new_matches.items():
-        auto_group_ruleset = bind_table[id_]
-        console.print("The following rule matched the following transactions")
-        console.print(auto_group_ruleset.rules)
-
-        table = transactions_table(transactions)
-
-        console.print(table)
-        confirmed = Confirm.ask(f"Assign the group {auto_group_ruleset.group.name} ?")
-        if confirmed:
-            for tr in transactions:
-                tr.bind_group(auto_group_ruleset.group)
-
-        console.clear()
+    with GROUP_BINDS.open("wb+") as f:
+        f.write(to_json(cache.group_binds))
 
 
 @app.command()
@@ -208,8 +221,8 @@ def categories(
             table.add_column("nb", justify="right")
 
         for group in _groups:
-            value = sum(tr.amount for tr in filter(group.transactions.all()))
-            number = len(list(filter(group.transactions.all())))
+            value = sum(tr.amount for tr in filter(group.all_transactions))
+            number = len(list(filter(group.all_transactions)))
             if number == 0 and not show_empty:  # value is 0 if number is 0
                 continue
 
@@ -332,6 +345,11 @@ def debug_auto_group(ctx: typer.Context, transaction_id: str):
         result = "[green]PASSED" if grouping_rule.test_match(transaction) else "[red]FAILED"
         console.print(f"[bold]Test {i+1}/{len(cache.grouping_rules)} ({grouping_rule.group.name}): [/bold] {result}")
         console.print(Panel(Pretty(grouping_rule.rules), title="Rules"))
+
+
+@app.command()
+def auto_group(ctx: typer.Context):
+    load(ctx.obj.paths)
 
 
 if __name__ == "__main__":
