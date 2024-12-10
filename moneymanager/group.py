@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-import yaml
 from pydantic import (
     BaseModel,
     Field,
@@ -212,59 +210,3 @@ class GroupBind(BaseModel):
 
     def __hash__(self) -> int:
         return hash((self.transaction_id, self.group_name))
-
-
-def load_groups(path: Path) -> Groups:
-    with path.open(encoding="utf-8") as f:
-        raw_groups = yaml.safe_load(f)
-    return Groups.model_validate(raw_groups)
-
-
-def load_grouping_rules(path: Path) -> list[AutoGroupRuleSets]:
-    with path.open(encoding="utf-8") as f:
-        grouping_rule_definitions = yaml.safe_load(f)
-
-    return GroupingRules.model_validate(grouping_rule_definitions).root
-
-
-def load_binds(path: Path) -> GroupBinds:
-    if not path.exists():
-        return GroupBinds(set())
-
-    with path.open("rb") as f:
-        group_binds = GroupBinds.model_validate_json(f.read())
-
-    return group_binds
-
-
-# if __name__ == "__main__":
-#     groups = load_groups(Path("./groups.yml"))
-
-#     from rich import print
-#     from rich.tree import Tree
-
-#     tree = Tree("Groups")
-
-#     def aux(tree: Tree, groups: Iterable[Group]):
-#         for group in groups:
-#             subtree = tree.add(group.name)
-#             if group.subgroups:
-#                 aux(subtree, group.subgroups)
-
-#     aux(tree, groups)
-#     print(tree)
-
-#     auto_group = load_grouping_rules(Path("./auto_group.yml"))
-#     print(auto_group)
-
-#     group = next(iter(groups))
-#     now = datetime.now()
-#     # group.transactions.add(Transaction(id="a", bank="b", account="c", amount=Decimal("1.2"), label="d", date=now))
-#     print(group.transactions)
-
-#     # group.transactions.append(Transaction(id="a", bank="b", account="c", amount=Decimal("1.2"), label="d", date=now))
-#     group.subgroups[0].transactions.add(
-#         Transaction(id="a", bank="b", account="c", amount=Decimal("1.2"), label="d", date=now)
-#     )
-
-#     print(Transaction(id="a", bank="b", account="c", amount=Decimal("1.2"), label="d", date=now) in group.transactions)

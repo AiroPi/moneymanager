@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from .account import Bank
-    from .accounts_settings import AccountsSettings
     from .group import AutoGroupRuleSets, GroupBinds, Groups
+    from .settings import AccountsSettings
     from .transaction import Transactions
     from .utils import ValuesIterDict
 

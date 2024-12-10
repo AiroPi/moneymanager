@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 
 from pydantic import GetCoreSchemaHandler
@@ -11,11 +10,6 @@ def fix_string(string: str):
     string = string.strip()
     string = string.encode().decode("utf-8-sig")
     return string
-
-
-def format_amount(amount: float | Decimal):
-    color = "[red]" if amount < 0 else "[green]"
-    return f"{color}{amount:,.2f}€"
 
 
 class ValuesIterDict[K, T](dict[K, T]):

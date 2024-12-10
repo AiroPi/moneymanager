@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr, RootModel
@@ -78,13 +77,3 @@ class Transactions(RootModel[set[Transaction]]):
 
     def __getitem__(self, key: str) -> Transaction:
         return self._mapped[key]
-
-
-def load_transactions(path: Path) -> Transactions:
-    if not path.exists():
-        return Transactions(set())
-
-    with path.open(encoding="utf-8") as f:
-        transactions = Transactions.model_validate_json(f.read())
-
-    return transactions
