@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from decimal import Decimal
+from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Concatenate
 from urllib import request
 
 import typer
@@ -43,6 +44,47 @@ AfterOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions prior to this date (the date itself is included)")
 ]
 
+type CallableWithContext[**P, R] = Callable[Concatenate[typer.Context, P], R]
+
+
+def with_load[R, **P](f: CallableWithContext[P, R]) -> CallableWithContext[P, R]:
+    """
+    Decorator to use if a command need the cache to be loaded to be executed.
+
+    `typer.Context` must be the first argument of the command callback.
+    The decorator must be placed under the `Typer.command()` decorator (in order to be executed before).
+
+    Example:
+    ```py
+    @app.command()
+    @with_load()
+    def my_command(ctx: typer.Context):
+        ...
+    ```
+    """
+
+    @wraps(f)
+    def wrapped(ctx: typer.Context, *args: P.args, **kwargs: P.kwargs) -> R:
+        load_cache(ctx.obj.paths)
+        return f(ctx, *args, **kwargs)
+
+    return wrapped
+
+
+def with_load_and_save[R, **P](f: CallableWithContext[P, R]) -> CallableWithContext[P, R]:
+    """
+    Same than `with_load()` but save at the end of the function also.
+    """
+
+    @wraps(f)
+    def wrapped(ctx: typer.Context, *args: P.args, **kwargs: P.kwargs) -> R:
+        load_cache(ctx.obj.paths)
+        result = f(ctx, *args, **kwargs)
+        save_data()
+        return result
+
+    return wrapped
+
 
 @app.callback()
 def common(
@@ -64,6 +106,7 @@ def common(
 
 
 @app.command()
+@with_load_and_save
 def categories(
     ctx: typer.Context,
     show_empty: Annotated[bool, typer.Option(help="Show categories with 0 transactions.")] = False,
@@ -73,7 +116,7 @@ def categories(
     """
     Shows a tree view of your expenses grouped by categories.
     """
-    load_cache(ctx.obj.paths)
+    prompt_automatic_grouping(preview=True)
     filter = filter_helper(before, after)
     console.print(Markdown("# By category"))
 
@@ -110,6 +153,7 @@ def categories(
 
 
 @app.command()
+@with_load_and_save
 def transactions(
     ctx: typer.Context,
     before: BeforeOption = None,
@@ -118,7 +162,7 @@ def transactions(
     """
     Lists all your transactions.
     """
-    load_cache(ctx.obj.paths)
+    prompt_automatic_grouping(preview=True)
     filter = filter_helper(before, after)
 
     table = transactions_table(sorted(filter(cache.transactions), key=lambda tr: tr.date))
@@ -126,12 +170,12 @@ def transactions(
 
 
 @app.command()
+@with_load
 def accounts(ctx: typer.Context):
     """
     Shows a recap of your accounts state.
     """
-    load_cache(ctx.obj.paths)
-
+    prompt_automatic_grouping(preview=True)
     console.print(Markdown("# Accounts"))
     accounts_table = Table(show_header=True, header_style="bold", width=console.width)
     accounts_table.add_column("Bank")
@@ -196,11 +240,11 @@ def reader_instructions(
 
 
 @debug_subcommands.command(name="auto-group")
+@with_load
 def debug_auto_group(ctx: typer.Context, transaction_id: str):
     """
     Debugs the auto grouping for a specific transaction.
     """
-    load_cache(ctx.obj.paths)
     transaction = next((t for t in cache.transactions if t.id == transaction_id), None)
     if transaction is None:
         raise ValueError("Transaction not found.")
@@ -215,13 +259,12 @@ def debug_auto_group(ctx: typer.Context, transaction_id: str):
 
 
 @app.command()
-def apply_auto_group(ctx: typer.Context):
+@with_load_and_save
+def update_auto_group(ctx: typer.Context):
     """
     Manually apply automatic grouping.
     """
-    load_cache(ctx.obj.paths)
     infos = prompt_automatic_grouping()
-    save_data()
     if infos.groups_updated == 0:
         console.print("Not any group to update.")
         return
@@ -230,7 +273,6 @@ def apply_auto_group(ctx: typer.Context):
         f"Found [bold]{infos.binds_added}[/bold] groups to add, [bold]{infos.binds_removed}[/bold] groups "
         f"to remove, for [bold]{infos.groups_updated}[/bold] {plural} [default not bold]group(s)."
     )
-    # todo
 
 
 if __name__ == "__main__":
