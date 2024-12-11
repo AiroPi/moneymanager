@@ -11,6 +11,12 @@ if TYPE_CHECKING:
 
 
 class Cache:
+    """
+    Singleton class that contains all the data the app can access during its process.
+    Technically, this could be replaced by contextvars. (I didn't know it exists).
+    But, making my own cache avoids conflicts, and allow asynchrone as well.
+    """
+
     instance: Self | None = None
     groups: Groups
     grouping_rules: list[AutoGroupRuleSets]

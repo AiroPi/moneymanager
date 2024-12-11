@@ -23,13 +23,25 @@ from moneymanager import (
     cache,
     filter_helper,
 )
-from moneymanager.loaders import PathsOptions, get_reader, load_cache
+from moneymanager.autogroup import prompt_automatic_grouping
+from moneymanager.loaders import PathsOptions, get_reader, load_cache, save_data
 from moneymanager.ui import console, format_amount, transactions_table
 
 if TYPE_CHECKING:
     from moneymanager.group import Group
 
-app = typer.Typer()
+app = typer.Typer(no_args_is_help=True)
+debug_subcommands = typer.Typer(hidden=True, no_args_is_help=True)
+app.add_typer(debug_subcommands, name="debug", help="Debug commands.")
+reader_subcommands = typer.Typer(no_args_is_help=True, help="Commands related to readers.")
+app.add_typer(reader_subcommands, name="reader")
+
+BeforeOption = Annotated[
+    datetime | None, typer.Option(help="Exclude transactions after this date (the date itself is excluded)")
+]
+AfterOption = Annotated[
+    datetime | None, typer.Option(help="Exclude transactions prior to this date (the date itself is included)")
+]
 
 
 @app.callback()
@@ -54,10 +66,13 @@ def common(
 @app.command()
 def categories(
     ctx: typer.Context,
-    show_empty: bool = typer.Option(False, help="Show categories with 0 transactions."),
-    before: datetime | None = typer.Option(None),
-    after: datetime | None = typer.Option(None),
+    show_empty: Annotated[bool, typer.Option(help="Show categories with 0 transactions.")] = False,
+    before: BeforeOption = None,
+    after: AfterOption = None,
 ):
+    """
+    Shows a tree view of your expenses grouped by categories.
+    """
     load_cache(ctx.obj.paths)
     filter = filter_helper(before, after)
     console.print(Markdown("# By category"))
@@ -95,7 +110,26 @@ def categories(
 
 
 @app.command()
+def transactions(
+    ctx: typer.Context,
+    before: BeforeOption = None,
+    after: AfterOption = None,
+):
+    """
+    Lists all your transactions.
+    """
+    load_cache(ctx.obj.paths)
+    filter = filter_helper(before, after)
+
+    table = transactions_table(sorted(filter(cache.transactions), key=lambda tr: tr.date))
+    console.print(table)
+
+
+@app.command()
 def accounts(ctx: typer.Context):
+    """
+    Shows a recap of your accounts state.
+    """
     load_cache(ctx.obj.paths)
 
     console.print(Markdown("# Accounts"))
@@ -124,21 +158,11 @@ def accounts(ctx: typer.Context):
     console.print(accounts_table)
 
 
-@app.command()
-def transactions(
-    ctx: typer.Context,
-    before: datetime | None = typer.Option(None),
-    after: datetime | None = typer.Option(None),
-):
-    load_cache(ctx.obj.paths)
-    filter = filter_helper(before, after)
-
-    table = transactions_table(sorted(filter(cache.transactions), key=lambda tr: tr.date))
-    console.print(table)
-
-
-@app.command()
-def install_default_readers(path: Path = Path("./readers")):
+@reader_subcommands.command(name="install-defaults")
+def reader_install_defaults(path: Path = Path("./readers")):
+    """
+    Installs the default readers available at https://github.com/AiroPi/moneymanager/tree/master/readers.
+    """
     if not path.exists():
         path.mkdir()
 
@@ -153,10 +177,13 @@ def install_default_readers(path: Path = Path("./readers")):
     print("Readers downloaded successfully.")
 
 
-@app.command()
+@reader_subcommands.command(name="instructions")
 def reader_instructions(
     reader_path: Annotated[Path, typer.Argument(help="The reader you want instruction from.")],
 ):
+    """
+    Gets the instructions to use a specific reader (how to make the transactions export).
+    """
     try:
         reader = get_reader(reader_path)
     except ValueError:
@@ -168,8 +195,11 @@ def reader_instructions(
     console.print(Markdown(reader.__doc__))
 
 
-@app.command(hidden=True)
+@debug_subcommands.command(name="auto-group")
 def debug_auto_group(ctx: typer.Context, transaction_id: str):
+    """
+    Debugs the auto grouping for a specific transaction.
+    """
     load_cache(ctx.obj.paths)
     transaction = next((t for t in cache.transactions if t.id == transaction_id), None)
     if transaction is None:
@@ -185,8 +215,22 @@ def debug_auto_group(ctx: typer.Context, transaction_id: str):
 
 
 @app.command()
-def auto_group(ctx: typer.Context):
+def apply_auto_group(ctx: typer.Context):
+    """
+    Manually apply automatic grouping.
+    """
     load_cache(ctx.obj.paths)
+    infos = prompt_automatic_grouping()
+    save_data()
+    if infos.groups_updated == 0:
+        console.print("Not any group to update.")
+        return
+    plural = "different" if infos.groups_updated > 1 else "single"
+    console.print(
+        f"Found [bold]{infos.binds_added}[/bold] groups to add, [bold]{infos.binds_removed}[/bold] groups "
+        f"to remove, for [bold]{infos.groups_updated}[/bold] {plural} [default not bold]group(s)."
+    )
+    # todo
 
 
 if __name__ == "__main__":
