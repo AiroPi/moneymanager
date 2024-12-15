@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from .account import Bank
-    from .group import AutoGroupRuleSets, GroupBinds, Groups
+    from .group import GroupBinds, GroupingRules, Groups
+    from .loaders import PathsOptions
     from .settings import AccountsSettings
     from .transaction import Transactions
     from .utils import ValuesIterDict
@@ -18,8 +19,9 @@ class Cache:
     """
 
     instance: Self | None = None
+    paths: PathsOptions
     groups: Groups
-    grouping_rules: list[AutoGroupRuleSets]
+    grouping_rules: GroupingRules
     accounts_settings: AccountsSettings
     transactions: Transactions
     already_parsed: list[str]

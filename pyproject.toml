@@ -1,6 +1,6 @@
 [project]
-name = "SortingMoney"
-version = "0.0.6"
+name = "moneymanager"
+version = "0.0.7"
 dependencies = [
     "pydantic>=2.10.2",
     "pyyaml>=6.0.2",

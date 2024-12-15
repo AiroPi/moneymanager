@@ -26,6 +26,7 @@ from moneymanager import (
 )
 from moneymanager.autogroup import prompt_automatic_grouping
 from moneymanager.loaders import PathsOptions, get_reader, load_cache, save_data
+from moneymanager.textual_apps import ManageGroupsApp
 from moneymanager.ui import console, format_amount, transactions_table
 
 if TYPE_CHECKING:
@@ -36,6 +37,8 @@ debug_subcommands = typer.Typer(hidden=True, no_args_is_help=True)
 app.add_typer(debug_subcommands, name="debug", help="Debug commands.")
 reader_subcommands = typer.Typer(no_args_is_help=True, help="Commands related to readers.")
 app.add_typer(reader_subcommands, name="reader")
+manage_subcommands = typer.Typer(no_args_is_help=True, help="Commands to manage your groups, etc.")
+app.add_typer(manage_subcommands, name="manage")
 
 BeforeOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions after this date (the date itself is excluded)")
@@ -273,6 +276,18 @@ def update_auto_group(ctx: typer.Context):
         f"Found [bold]{infos.binds_added}[/bold] groups to add, [bold]{infos.binds_removed}[/bold] groups "
         f"to remove, for [bold]{infos.groups_updated}[/bold] {plural} [default not bold]group(s)."
     )
+
+
+@manage_subcommands.command(name="groups")
+@with_load
+def manage_groups(ctx: typer.Context):
+    """
+    Invoke a TUI app to manage your groups (rename, delete, create...).
+
+    Be careful, this command will rewrite your config files, and thus, remove all the commented sections, etc.
+    """
+    app = ManageGroupsApp()
+    app.run()
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ import yaml
 from pydantic_core import from_json, to_json
 
 from .cache import cache
-from .group import AutoGroupRuleSets, GroupBinds, GroupingRules, Groups
+from .group import GroupBinds, GroupingRules, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
 from .transaction import Transactions
@@ -42,14 +42,14 @@ def load_groups_config(path: Path) -> Groups:
     return Groups.model_validate(raw_groups)
 
 
-def load_grouping_rules_config(path: Path) -> list[AutoGroupRuleSets]:
+def load_grouping_rules_config(path: Path) -> GroupingRules:
     """
     Loads "auto_group.yml"
     """
     with path.open(encoding="utf-8") as f:
         grouping_rule_definitions = yaml.safe_load(f)
 
-    return GroupingRules.model_validate(grouping_rule_definitions).root
+    return GroupingRules.model_validate(grouping_rule_definitions)
 
 
 def load_accounts_settings_config(path: Path) -> AccountsSettings:
@@ -80,10 +80,35 @@ def transform(accounts_settings: AccountsSettingsValidator):
     return AccountsSettings(aliases=aliases, initial_values=initial_values)
 
 
-def load_config(paths: PathsOptions):
-    cache.groups = load_groups_config(paths.groups)
-    cache.grouping_rules = load_grouping_rules_config(paths.rules)
-    cache.accounts_settings = load_accounts_settings_config(paths.account_settings)
+def load_config():
+    cache.groups = load_groups_config(cache.paths.groups)
+    cache.grouping_rules = load_grouping_rules_config(cache.paths.rules)
+    cache.accounts_settings = load_accounts_settings_config(cache.paths.account_settings)
+
+
+def save_config():
+    with cache.paths.groups.open("wb+") as f:
+        f.write(
+            yaml.safe_dump(
+                cache.groups.model_dump(exclude_defaults=True, by_alias=True),
+                encoding="utf8",
+                allow_unicode=True,
+                width=120,
+                sort_keys=False,
+            )
+        )
+    with cache.paths.rules.open("wb+") as f:
+        result = cache.grouping_rules.model_dump(exclude_defaults=True, by_alias=True)
+
+        f.write(
+            yaml.safe_dump(
+                result,
+                encoding="utf8",
+                allow_unicode=True,
+                width=120,
+                sort_keys=False,
+            )
+        )
 
 
 # Data loaders (managed by the program) [.json files]
@@ -250,9 +275,10 @@ def load_cache(paths: PathsOptions):
     """
     Will load the config and the data in the cache.
     """
+    cache.paths = paths
     cache.banks = ValuesIterDict()  # dynamically built
 
-    load_config(paths)
+    load_config()
     load_data()
 
     if cache.debug_mode:

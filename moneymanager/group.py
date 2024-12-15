@@ -5,10 +5,12 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     PrivateAttr,
     RootModel,
     SkipValidation,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -34,22 +36,59 @@ class Groups(RootModel[list["Group"]]):
         for group in groups:
             if group.name in self._mapped_groups:
                 raise ValueError(f"Duplicate group {group.name}")
-            self._mapped_groups[group.name] = group
-            if group.subgroups:
-                self._map_groups(group.subgroups)
+            self._map(group)
+
+    def _map(self, group: Group):
+        self._mapped_groups[group.name] = group
+        self._map_groups(group.subgroups)
 
     def get_group(self, name: str) -> Group | None:
         return self._mapped_groups.get(name)
+
+    def update_group_mapping(self, old_name: str, group: Group):
+        self._mapped_groups.pop(old_name)
+        self._mapped_groups[group.name] = group
+
+    def create(self, name: str, parent: Group | None = None):
+        if name in self._mapped_groups:
+            raise ValueError("You can't have 2 groups with the same name!")
+        group = Group(name=name, parent=parent)
+        self._map(group)
+        if parent:
+            parent.subgroups.append(group)
+        return group
+
+    def remove(self, group: Group):
+        for bind in group.binds.copy():
+            cache.group_binds.remove(bind)
+        for sub in group.subgroups.copy():
+            self.remove(sub)
+        if group.parent:
+            group.parent.subgroups.remove(group)
+        cache.grouping_rules.root = [r for r in cache.grouping_rules if r.group != group]
+        self._mapped_groups.pop(group.name)
 
     def __getitem__(self, key: str) -> Group:
         return self._mapped_groups[key]
 
 
 class Group(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: Annotated[str, Field(alias="group_name")]
     subgroups: list[Group] = Field(default_factory=list)
     parent: Group | None = Field(None, exclude=True)
     _binds: set[GroupBind] = PrivateAttr(default_factory=set)
+
+    def delete(self):
+        cache.groups.remove(self)
+
+    def rename(self, name: str):
+        old_name = self.name
+        self.name = name
+        for bind in self.binds:
+            bind.group_name = name
+        cache.groups.update_group_mapping(old_name, self)
 
     def model_post_init(self, _: Any) -> None:
         for group in self.subgroups:
@@ -81,7 +120,12 @@ class Group(BaseModel):
         return isinstance(value, Group) and value.name == self.name
 
 
-class GroupingRules(RootModel[list["AutoGroupRuleSets"]]): ...
+class GroupingRules(RootModel[list["AutoGroupRuleSets"]]):
+    def __iter__(self):  # type: ignore
+        return iter(self.root)
+
+    def __len__(self):
+        return len(self.root)
 
 
 class AutoGroupRuleSets(BaseModel):
@@ -96,6 +140,10 @@ class AutoGroupRuleSets(BaseModel):
             raise ValueError(f"The group '{v}' was not found in groups.")
         return group
 
+    @field_serializer("group")
+    def serialize_group(self, group: Group):
+        return group.name
+
     def test_match(self, item: Transaction) -> bool:
         # By default, multiple rules out of a AndRule are computed as an and rule.
         return all(rule.test(item) for rule in self.rules)
@@ -107,10 +155,12 @@ type Rule = Annotated[
 
 
 class NestingRule(BaseModel):
+    type: Any  # here to define the ordering
     rules: list[Rule]
 
 
 class TestRule(BaseModel):
+    type: Any  # here to define the ordering
     key: str
     value: str
 
