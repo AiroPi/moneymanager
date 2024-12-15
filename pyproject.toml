@@ -10,12 +10,14 @@ dependencies = [
 ]
 requires-python = ">=3.12"
 
+[project.scripts]
+moneymanager = "moneymanager.__main__:app"
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[project.scripts]
-moneymanager = "moneymanager.__main__:app"
 
 [tool.uv]
 dev-dependencies = [
@@ -27,21 +29,21 @@ dev-dependencies = [
     "tox-uv",
 ]
 
-[tool.tox]
-legacy_tox_ini = """
-[tox]
-envlist = py312
 
-[testenv]
-runner = uv-venv-lock-runner
-description = run all checks on the code
-extras = 
-    dev
-commands =
-    ruff format --check src
-    ruff check src
-    pyright src/
-"""
+[tool.tox]
+envlist = ["py312"]
+
+[tool.tox.env_run_base]
+runner = "uv-venv-lock-runner"
+description = "run all checks on the code"
+extras = ["dev"]
+commands = [
+    #fmt
+    ["ruff", "format", "--check", "moneymanager"],
+    ["ruff", "check", "moneymanager"],
+    ["pyright", "moneymanager"],
+]
+
 
 [tool.ruff]
 line-length = 120
