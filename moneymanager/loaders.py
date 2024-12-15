@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from .group import GroupBinds, GroupingRules, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
 from .transaction import Transactions
-from .ui import Confirm, Markdown, console
+from .ui import Markdown, console
 from .utils import ValuesIterDict
 
 DATA_PATH = Path("./data")
@@ -114,43 +115,42 @@ def save_config():
 # Data loaders (managed by the program) [.json files]
 
 
-def load_already_parsed(path: Path) -> list[str]:
+def load_already_parsed() -> None:
     """
     Loads "data/already_parsed.json".
     """
-    if path.exists():
-        with path.open("rb") as f:
-            return from_json(f.read())
-    else:
-        return []
+    if not ALREADY_PARSED_PATH.exists():
+        cache.already_parsed = []
+        return
+
+    with ALREADY_PARSED_PATH.open("rb") as f:
+        cache.already_parsed = from_json(f.read())
 
 
-def load_transactions_data(path: Path) -> Transactions:
+def load_transactions_data() -> None:
     """
     Loads "data/group_binds.json".
     """
-    if not path.exists():
-        return Transactions(set())
+    if not TRANSACTIONS_PATH.exists():
+        cache.transactions = Transactions(set())
+        return
 
-    with path.open(encoding="utf-8") as f:
-        transactions = Transactions.model_validate_json(f.read())
-
-    return transactions
+    with TRANSACTIONS_PATH.open(encoding="utf-8") as f:
+        cache.transactions = Transactions.model_validate_json(f.read())
 
 
-def load_binds_data(path: Path) -> GroupBinds:
+def load_binds_data() -> None:
     """
     Loads "data/group_binds.json".
     Groups needs to be already loaded in cache (from the config). (Call `load_groups_config()` first)
     Transactions needs to be already loaded in cache (from the data). (Call `load_transactions_data()` first)
     """
-    if not path.exists():
-        return GroupBinds(set())
+    if not GROUP_BINDS.exists():
+        cache.group_binds = GroupBinds(set())
+        return
 
-    with path.open("rb") as f:
-        group_binds = GroupBinds.model_validate_json(f.read())
-
-    return group_binds
+    with GROUP_BINDS.open("rb") as f:
+        cache.group_binds = GroupBinds.model_validate_json(f.read())
 
 
 def load_data():
@@ -158,9 +158,9 @@ def load_data():
     Loads the datas from previously saved files and add them to the cache.
     `load_config(...)` needs to be called first.
     """
-    cache.already_parsed = load_already_parsed(ALREADY_PARSED_PATH)
-    cache.transactions = load_transactions_data(TRANSACTIONS_PATH)
-    cache.group_binds = load_binds_data(GROUP_BINDS)
+    load_already_parsed()
+    load_transactions_data()
+    load_binds_data()
 
 
 def save_data():
@@ -181,13 +181,13 @@ def save_data():
 # Readers loader (interpreted files) [.py files]
 
 
-def load_readers(readers_path: Path):
+def load_readers():
     """
     Looks at all .py files in the given directory and get the Reader class from the `export()` function.
     """
     readers: list[type[ReaderABC]] = []
 
-    for reader_path in (readers_path).glob("*.py"):
+    for reader_path in (cache.paths.readers).glob("*.py"):
         try:
             module = get_reader(reader_path)
         except ValueError as e:
@@ -206,7 +206,7 @@ def load_readers(readers_path: Path):
 
         readers.extend(exported)
 
-    return readers
+    cache.readers = readers
 
 
 def get_reader(path: Path):
@@ -236,61 +236,99 @@ def check_output_type(output: Any) -> TypeIs[list[type[ReaderABC]]]:
 # Exports reader (read files dropped in the 'exports' folder) [any (most likely csv files)]
 
 
-def parse_transactions(paths: PathsOptions):
-    """
-    Reads all the files in the 'exports' folder, detects the correct Reader, and uses it to add the new Transactions
-    into the cache.
-    """
-    readers: list[type[ReaderABC]] = load_readers(paths.readers)
+def import_transactions_export(path: Path):
+    file = path.open("rb")
+    fingerprint = hashlib.md5(file.read()).hexdigest()  # noqa: S324
+    if fingerprint in cache.already_parsed:
+        console.print(Markdown(f"The file `{path}` seems to be already imported !"))
+        return
+    file.seek(0)
 
-    for export_path in Path(paths.exports).glob("*"):
-        if str(export_path.absolute()) in cache.already_parsed:
-            continue
+    reader = detect_reader(file)
+    if reader is None:
+        file.close()
+        console.print(
+            Markdown(
+                f"Didn't found any reader that match the file `{path}`. Can't be imported. Maybe you need to install the defaults ones with `moneymanager "
+                "reader install-defaults`.\n"
+                "Otherwise, consider creating your own."
+            )
+        )
+        return
 
-        file = export_path.open("rb")
-        reader = detect_reader(readers, file)
-        if not reader:
-            file.close()
-            print(f"No reader available for the export {export_path}")
-            continue
+    count = 0
+    with reader as content:
+        for transaction in content:
+            if transaction in cache.transactions:
+                continue
+            cache.transactions.add(transaction)
+            count += 1
 
-        count = 0
-        with reader as content:
-            for transaction in content:
-                if transaction in cache.transactions:
-                    continue
-                cache.transactions.add(transaction)
-                count += 1
+    path.rename(cache.paths.exports / f"{fingerprint} - {path.name}")
+    cache.already_parsed.append(fingerprint)
+    console.print(Markdown(f"Successfully imported the file `{path}` with **{count}** new transactions !"))
 
-        if count:
-            console.print(f"Loaded [bold]{count}[/bold] new transactions from {export_path.absolute()}.")
 
-        cache.already_parsed.append(str(export_path.absolute()))
+# def parse_transactions():
+#     """
+#     Reads all the files in the 'exports' folder, detects the correct Reader, and uses it to add the new Transactions
+#     into the cache.
+#     """
+
+#     for export_path in Path(cache.paths.exports).glob("*"):
+#         if str(export_path.absolute()) in cache.already_parsed:
+#             continue
+
+#         file = export_path.open("rb")
+#         reader = detect_reader(file)
+#         if not reader:
+#             file.close()
+#             print(f"No reader available for the export {export_path}")
+#             continue
+
+#         count = 0
+#         with reader as content:
+#             for transaction in content:
+#                 if transaction in cache.transactions:
+#                     continue
+#                 cache.transactions.add(transaction)
+#                 count += 1
+
+#         if count:
+#             console.print(f"Loaded [bold]{count}[/bold] new transactions from {export_path.absolute()}.")
+
+#         cache.already_parsed.append(str(export_path.absolute()))
 
 
 # Cache loader
 
 
-def load_cache(paths: PathsOptions):
+def init_cache(paths: PathsOptions):
     """
-    Will load the config and the data in the cache.
+    Init the cache with default values and values from the environ variables / command arguments.
     """
     cache.paths = paths
     cache.banks = ValuesIterDict()  # dynamically built
 
+
+def load_cache():
+    """
+    Will load the config and the data in the cache.
+    """
+    load_readers()
     load_config()
     load_data()
 
-    if cache.debug_mode:
-        console.print(Markdown("# Banks"))
-        console.print(cache.banks)
-        console.print(Markdown("# Groups"))
-        console.print(cache.groups)
-        console.print(Markdown("# Grouping rules"))
-        console.print(cache.grouping_rules)
-        console.print(Markdown("# Accounts settings"))
-        console.print(cache.accounts_settings)
-        if Confirm.ask("Continue?"):
-            console.clear()
-        else:
-            raise SystemExit(0)
+    # if cache.debug_mode:
+    #     console.print(Markdown("# Banks"))
+    #     console.print(cache.banks)
+    #     console.print(Markdown("# Groups"))
+    #     console.print(cache.groups)
+    #     console.print(Markdown("# Grouping rules"))
+    #     console.print(cache.grouping_rules)
+    #     console.print(Markdown("# Accounts settings"))
+    #     console.print(cache.accounts_settings)
+    #     if Confirm.ask("Continue?"):
+    #         console.clear()
+    #     else:
+    #         raise SystemExit(0)

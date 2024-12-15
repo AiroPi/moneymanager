@@ -6,31 +6,36 @@ from decimal import Decimal
 from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Annotated, Concatenate
+from typing import TYPE_CHECKING, Annotated, Any, Concatenate
 from urllib import request
 
 import typer
 from pydantic_core import from_json
-from rich.columns import Columns
-from rich.console import Group as RichGroup
-from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.pretty import Pretty
-from rich.table import Table
-from rich.text import Text
-from rich.tree import Tree
 
 from moneymanager import (
     cache,
     filter_helper,
 )
 from moneymanager.autogroup import prompt_automatic_grouping
-from moneymanager.loaders import PathsOptions, get_reader, load_cache, save_data
+from moneymanager.loaders import PathsOptions, get_reader, import_transactions_export, init_cache, load_cache, save_data
 from moneymanager.textual_apps import ManageGroupsApp
-from moneymanager.ui import console, format_amount, transactions_table
+from moneymanager.ui import (
+    Columns,
+    Group as RichGroup,
+    Markdown,
+    Panel,
+    Pretty,
+    Table,
+    Text,
+    Tree,
+    console,
+    format_amount,
+    transactions_table,
+)
 
 if TYPE_CHECKING:
     from moneymanager.group import Group
+
 
 app = typer.Typer(no_args_is_help=True)
 debug_subcommands = typer.Typer(hidden=True, no_args_is_help=True)
@@ -39,6 +44,9 @@ reader_subcommands = typer.Typer(no_args_is_help=True, help="Commands related to
 app.add_typer(reader_subcommands, name="reader")
 manage_subcommands = typer.Typer(no_args_is_help=True, help="Commands to manage your groups, etc.")
 app.add_typer(manage_subcommands, name="manage")
+update_subcommands = typer.Typer(no_args_is_help=True, help="Commands to update the database.")
+app.add_typer(update_subcommands, name="update")
+
 
 BeforeOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions after this date (the date itself is excluded)")
@@ -47,46 +55,51 @@ AfterOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions prior to this date (the date itself is included)")
 ]
 
+
 type CallableWithContext[**P, R] = Callable[Concatenate[typer.Context, P], R]
+type SimpleFunctions = Iterable[Callable[[], Any]]
 
 
-def with_load[R, **P](f: CallableWithContext[P, R]) -> CallableWithContext[P, R]:
-    """
-    Decorator to use if a command need the cache to be loaded to be executed.
+def with_operation_wrappers(*, before: SimpleFunctions | None = None, after: SimpleFunctions | None = None):
+    def decorator[R, **P](f: CallableWithContext[P, R]) -> CallableWithContext[P, R]:
+        @wraps(f)
+        def wrapped(ctx: typer.Context, *args: P.args, **kwargs: P.kwargs) -> R:
+            init_cache(ctx.obj.paths)
+            if before:
+                for callable in before:
+                    callable()
+            result = f(ctx, *args, **kwargs)
+            if after:
+                for callable in after:
+                    callable()
+            return result
 
-    `typer.Context` must be the first argument of the command callback.
-    The decorator must be placed under the `Typer.command()` decorator (in order to be executed before).
+        return wrapped
 
-    Example:
-    ```py
-    @app.command()
-    @with_load()
-    def my_command(ctx: typer.Context):
-        ...
-    ```
-    """
-
-    @wraps(f)
-    def wrapped(ctx: typer.Context, *args: P.args, **kwargs: P.kwargs) -> R:
-        load_cache(ctx.obj.paths)
-        return f(ctx, *args, **kwargs)
-
-    return wrapped
+    return decorator
 
 
-def with_load_and_save[R, **P](f: CallableWithContext[P, R]) -> CallableWithContext[P, R]:
-    """
-    Same than `with_load()` but save at the end of the function also.
-    """
+with_load = with_operation_wrappers(before=[load_cache])
+"""
+Decorator to use if a command need the cache to be loaded to be executed.
 
-    @wraps(f)
-    def wrapped(ctx: typer.Context, *args: P.args, **kwargs: P.kwargs) -> R:
-        load_cache(ctx.obj.paths)
-        result = f(ctx, *args, **kwargs)
-        save_data()
-        return result
+`typer.Context` must be the first argument of the command callback.
+The decorator must be placed under the `Typer.command()` decorator (in order to be executed before).
 
-    return wrapped
+Example:
+```py
+@app.command()
+@with_load()
+def my_command(ctx: typer.Context):
+    ...
+```
+"""
+
+
+with_load_and_save = with_operation_wrappers(before=[load_cache], after=[save_data])
+"""
+Same than `with_load()` but save at the end of the function also.
+"""
 
 
 @app.callback()
@@ -205,6 +218,28 @@ def accounts(ctx: typer.Context):
     console.print(accounts_table)
 
 
+@app.command(name="import")
+@with_load_and_save
+def import_(
+    ctx: typer.Context,
+    path: Annotated[Path, typer.Argument(help="Path to the export(s).")],
+    copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file. Not implemented.")] = False,
+):
+    """
+    Import a bank export to your exports folder. This move the file.
+    """
+    if not path.exists():
+        console.print("Please enter a valid path !")
+        return
+    if path.is_dir():
+        for file_path in path.glob("*"):
+            if file_path.is_dir():
+                continue
+            import_transactions_export(file_path)
+    else:
+        import_transactions_export(path)
+
+
 @reader_subcommands.command(name="install-defaults")
 def reader_install_defaults(path: Path = Path("./readers")):
     """
@@ -261,11 +296,11 @@ def debug_auto_group(ctx: typer.Context, transaction_id: str):
         console.print(Panel(Pretty(grouping_rule.rules), title="Rules"))
 
 
-@app.command()
+@update_subcommands.command(name="auto-group")
 @with_load_and_save
 def update_auto_group(ctx: typer.Context):
     """
-    Manually apply automatic grouping.
+    Update auto group binds.
     """
     infos = prompt_automatic_grouping()
     if infos.groups_updated == 0:
@@ -276,6 +311,17 @@ def update_auto_group(ctx: typer.Context):
         f"Found [bold]{infos.binds_added}[/bold] groups to add, [bold]{infos.binds_removed}[/bold] groups "
         f"to remove, for [bold]{infos.groups_updated}[/bold] {plural} [default not bold]group(s)."
     )
+
+
+# @update_subcommands.command(name="transactions")
+# @with_load_and_save
+# def update_transactions(
+#     ctx: typer.Context,
+#     all: Annotated[bool, typer.Option(help="Also read already-parsed transactions files.")] = False,
+# ):
+#     """
+#     Read your new exports and add them to the database.
+#     """
 
 
 @manage_subcommands.command(name="groups")

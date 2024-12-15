@@ -3,16 +3,21 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from rich.console import Console
+from rich.columns import Columns as Columns
+from rich.console import Console, Group as Group
 from rich.markdown import Markdown as Markdown
+from rich.panel import Panel as Panel
+from rich.pretty import Pretty as Pretty
 from rich.prompt import Confirm as Confirm
 from rich.table import Table as Table
 from rich.text import Text as Text
+from rich.tree import Tree as Tree
 
 if TYPE_CHECKING:
     from decimal import Decimal
 
     from .transaction import Transaction
+
 
 console = Console()
 

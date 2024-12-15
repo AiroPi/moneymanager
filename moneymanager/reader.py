@@ -7,6 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
+from .cache import cache
 from .transaction import Transaction
 
 if TYPE_CHECKING:
@@ -61,7 +62,7 @@ class ReaderABC(abc.ABC):
         return id_
 
 
-def detect_reader(readers: list[type[ReaderABC]], file: io.BufferedReader) -> ReaderABC | None:
-    for reader_cls in readers:
+def detect_reader(file: io.BufferedReader) -> ReaderABC | None:
+    for reader_cls in cache.readers:
         if (reader := reader_cls.detect_file(file)) is not None:
             return reader

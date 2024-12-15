@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from .account import Bank
     from .group import GroupBinds, GroupingRules, Groups
     from .loaders import PathsOptions
+    from .reader import ReaderABC
     from .settings import AccountsSettings
     from .transaction import Transactions
     from .utils import ValuesIterDict
@@ -27,6 +28,7 @@ class Cache:
     already_parsed: list[str]
     banks: ValuesIterDict[str, Bank]
     group_binds: GroupBinds
+    readers: list[type[ReaderABC]]
 
     debug_mode: bool = False
 
