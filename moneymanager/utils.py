@@ -7,8 +7,8 @@ from pydantic_core import CoreSchema, core_schema
 
 
 def fix_string(string: str):
-    string = string.strip()
     string = string.encode().decode("utf-8-sig")
+    string = string.strip()
     return string
 
 

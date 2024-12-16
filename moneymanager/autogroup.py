@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Literal, NamedTuple, overload
 
 from .cache import cache
@@ -8,6 +9,7 @@ from .ui import Confirm, Markdown, console, transactions_table
 
 if TYPE_CHECKING:
     from .group import AutoGroupRuleSets
+    from .transaction import Transaction
 
 
 class GroupingInfos(NamedTuple):
@@ -17,28 +19,39 @@ class GroupingInfos(NamedTuple):
 
 
 @overload
-def prompt_automatic_grouping(*, bypass_confirm: Literal[True] = ..., preview: Literal[False] = ...) -> ...: ...
+def prompt_automatic_grouping(
+    *, transactions: ... = ..., bypass_confirm: Literal[True] = ..., preview: Literal[False] = ...
+) -> ...: ...
 
 
 @overload
-def prompt_automatic_grouping(*, bypass_confirm: Literal[False] = ..., preview: Literal[True] = ...) -> ...: ...
+def prompt_automatic_grouping(
+    *, transactions: ... = ..., bypass_confirm: Literal[False] = ..., preview: Literal[True] = ...
+) -> ...: ...
 
 
-def prompt_automatic_grouping(*, bypass_confirm: bool = False, preview: bool = False) -> GroupingInfos:
+def prompt_automatic_grouping(
+    *, transactions: Iterable[Transaction] | None = None, bypass_confirm: bool = False, preview: bool = False
+) -> GroupingInfos:
     """
     Loops over all the cached transactions, and tests them against the auto-group rules presents in the cache.
     """
     if preview and bypass_confirm:
         raise ValueError("`bypass_confirm` and `preview` can't both be True.")
 
+    if transactions is None:
+        transactions = cache.transactions
+
     groups_updated, binds_added, binds_removed = 0, 0, 0
     for grouping_rule in cache.grouping_rules:
         matches: set[GroupBind] = set()
-        for transaction in cache.transactions:
+        for transaction in transactions:
             if grouping_rule.test_match(transaction):
                 matches.add(GroupBind.from_objects(transaction, grouping_rule.group, "auto"))
 
-        already_added = {bind for bind in grouping_rule.group.binds if bind.type == "auto"}
+        already_added = {
+            bind for bind in grouping_rule.group.binds if bind.type == "auto" and bind.transaction in transactions
+        }
         removed = already_added - matches
         added = matches - already_added
 

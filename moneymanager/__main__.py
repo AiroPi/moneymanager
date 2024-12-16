@@ -5,8 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from functools import wraps
 from pathlib import Path
-from types import SimpleNamespace
-from typing import TYPE_CHECKING, Annotated, Any, Concatenate
+from typing import TYPE_CHECKING, Annotated, Any
 from urllib import request
 
 import typer
@@ -35,6 +34,7 @@ from moneymanager.ui import (
 
 if TYPE_CHECKING:
     from moneymanager.group import Group
+    from moneymanager.transaction import Transaction
 
 
 app = typer.Typer(no_args_is_help=True)
@@ -56,19 +56,18 @@ AfterOption = Annotated[
 ]
 
 
-type CallableWithContext[**P, R] = Callable[Concatenate[typer.Context, P], R]
+type CommandCb[**P, R] = Callable[P, R]
 type SimpleFunctions = Iterable[Callable[[], Any]]
 
 
 def with_operation_wrappers(*, before: SimpleFunctions | None = None, after: SimpleFunctions | None = None):
-    def decorator[R, **P](f: CallableWithContext[P, R]) -> CallableWithContext[P, R]:
+    def decorator[R, **P](f: CommandCb[P, R]) -> CommandCb[P, R]:
         @wraps(f)
-        def wrapped(ctx: typer.Context, *args: P.args, **kwargs: P.kwargs) -> R:
-            init_cache(ctx.obj.paths)
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
             if before:
                 for callable in before:
                     callable()
-            result = f(ctx, *args, **kwargs)
+            result = f(*args, **kwargs)
             if after:
                 for callable in after:
                     callable()
@@ -104,7 +103,6 @@ Same than `with_load()` but save at the end of the function also.
 
 @app.callback()
 def common(
-    ctx: typer.Context,
     readers: Path = typer.Option(Path("./readers"), envvar="READERS_PATH", help="Path to the readers files folder."),
     exports: Path = typer.Option(
         Path("./exports"), envvar="EXPORTS_PATH", help="Path to the transactions exports folder."
@@ -116,15 +114,15 @@ def common(
     ),
     debug: bool = typer.Option(False, help="Show some debug values"),
 ):
-    ctx.obj = SimpleNamespace(paths=PathsOptions(readers, exports, rules, groups, settings), debug=debug)
-    if debug:
-        cache.debug_mode = debug
+    """
+    Define root options, and initialize the cache.
+    """
+    init_cache(PathsOptions(readers, exports, rules, groups, settings), debug)
 
 
 @app.command()
 @with_load_and_save
 def categories(
-    ctx: typer.Context,
     show_empty: Annotated[bool, typer.Option(help="Show categories with 0 transactions.")] = False,
     before: BeforeOption = None,
     after: AfterOption = None,
@@ -171,7 +169,6 @@ def categories(
 @app.command()
 @with_load_and_save
 def transactions(
-    ctx: typer.Context,
     before: BeforeOption = None,
     after: AfterOption = None,
 ):
@@ -187,7 +184,7 @@ def transactions(
 
 @app.command()
 @with_load
-def accounts(ctx: typer.Context):
+def accounts():
     """
     Shows a recap of your accounts state.
     """
@@ -221,7 +218,6 @@ def accounts(ctx: typer.Context):
 @app.command(name="import")
 @with_load_and_save
 def import_(
-    ctx: typer.Context,
     path: Annotated[Path, typer.Argument(help="Path to the export(s).")],
     copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file. Not implemented.")] = False,
 ):
@@ -231,13 +227,36 @@ def import_(
     if not path.exists():
         console.print("Please enter a valid path !")
         return
-    if path.is_dir():
-        for file_path in path.glob("*"):
-            if file_path.is_dir():
-                continue
-            import_transactions_export(file_path)
+
+    new_transactions: set[Transaction] = set()
+    file_paths: Iterable[Path] = path.glob("*") if path.is_dir() else (path,)
+
+    new_transactions = set()
+    for file_path in file_paths:
+        if file_path.is_dir():
+            continue
+        res = import_transactions_export(file_path)
+        if res is not None:
+            new_transactions.update(res)
+
+    if new_transactions:
+        infos = prompt_automatic_grouping(transactions=new_transactions)
+        if infos.groups_updated == 0:
+            console.print(
+                Markdown(
+                    f"Imported **{len(new_transactions)}** new transaction(s), but not groups matched the new entries."
+                )
+            )
+            return
+        plural = "different" if infos.groups_updated > 1 else "single"
+        console.print(
+            Markdown(
+                f"Imported **{len(new_transactions)}** new transaction(s)!\n"
+                f"Found **{infos.binds_added}** bind(s) to add, for **{infos.groups_updated}** {plural} group(s)."
+            )
+        )
     else:
-        import_transactions_export(path)
+        console.print("Not any new transaction found!")
 
 
 @reader_subcommands.command(name="install-defaults")
@@ -279,7 +298,7 @@ def reader_instructions(
 
 @debug_subcommands.command(name="auto-group")
 @with_load
-def debug_auto_group(ctx: typer.Context, transaction_id: str):
+def debug_auto_group(transaction_id: str):
     """
     Debugs the auto grouping for a specific transaction.
     """
@@ -298,7 +317,7 @@ def debug_auto_group(ctx: typer.Context, transaction_id: str):
 
 @update_subcommands.command(name="auto-group")
 @with_load_and_save
-def update_auto_group(ctx: typer.Context):
+def update_auto_group():
     """
     Update auto group binds.
     """
@@ -313,20 +332,9 @@ def update_auto_group(ctx: typer.Context):
     )
 
 
-# @update_subcommands.command(name="transactions")
-# @with_load_and_save
-# def update_transactions(
-#     ctx: typer.Context,
-#     all: Annotated[bool, typer.Option(help="Also read already-parsed transactions files.")] = False,
-# ):
-#     """
-#     Read your new exports and add them to the database.
-#     """
-
-
 @manage_subcommands.command(name="groups")
 @with_load
-def manage_groups(ctx: typer.Context):
+def manage_groups():
     """
     Invoke a TUI app to manage your groups (rename, delete, create...).
 

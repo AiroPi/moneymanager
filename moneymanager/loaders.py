@@ -12,7 +12,7 @@ from .cache import cache
 from .group import GroupBinds, GroupingRules, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
-from .transaction import Transactions
+from .transaction import Transaction, Transactions
 from .ui import Markdown, console
 from .utils import ValuesIterDict
 
@@ -236,7 +236,7 @@ def check_output_type(output: Any) -> TypeIs[list[type[ReaderABC]]]:
 # Exports reader (read files dropped in the 'exports' folder) [any (most likely csv files)]
 
 
-def import_transactions_export(path: Path):
+def import_transactions_export(path: Path) -> set[Transaction] | None:
     file = path.open("rb")
     fingerprint = hashlib.md5(file.read()).hexdigest()  # noqa: S324
     if fingerprint in cache.already_parsed:
@@ -257,16 +257,23 @@ def import_transactions_export(path: Path):
         return
 
     count = 0
+    new_transactions: set[Transaction] = set()
     with reader as content:
         for transaction in content:
             if transaction in cache.transactions:
                 continue
             cache.transactions.add(transaction)
+            new_transactions.add(transaction)
             count += 1
 
-    path.rename(cache.paths.exports / f"{fingerprint} - {path.name}")
+    new_name = cache.paths.exports / f"{fingerprint} - {path.name}"
+    if path.name.startswith(fingerprint):
+        new_name = cache.paths.exports / path.name
+
+    path.rename(new_name)
     cache.already_parsed.append(fingerprint)
     console.print(Markdown(f"Successfully imported the file `{path}` with **{count}** new transactions !"))
+    return new_transactions
 
 
 # def parse_transactions():
@@ -303,11 +310,12 @@ def import_transactions_export(path: Path):
 # Cache loader
 
 
-def init_cache(paths: PathsOptions):
+def init_cache(paths: PathsOptions, debug_mode: bool = False):
     """
     Init the cache with default values and values from the environ variables / command arguments.
     """
     cache.paths = paths
+    cache.debug_mode = debug_mode
     cache.banks = ValuesIterDict()  # dynamically built
 
 

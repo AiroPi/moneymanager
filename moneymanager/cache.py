@@ -35,11 +35,13 @@ class Cache:
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if cls.instance is None:
             cls.instance = super().__new__(cls, *args, **kwargs)
-            # cls.instance.groups = Groups([])
-            # cls.instance.grouping_rules = []
-            # cls.accounts_settings = AccountsSettings(aliases={}, initial_values={})
-            # cls.transactions = set()
         return cls.instance
+
+    def __getattr__(self, name: str) -> Any:
+        raise AttributeError(
+            f"{name} is not loaded in the cache. Call the associated loader first (maybe you messed up "
+            "with the load order?)"
+        )
 
 
 cache = Cache()
