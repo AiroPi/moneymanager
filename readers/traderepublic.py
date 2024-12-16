@@ -1,9 +1,9 @@
 """
 # Export instructions
 
-- install the "pytr" python module
-- use the commande "pytr dl_docs *path*
-- take the account_transactions.csv file out of all the files
+- install the `pytr` python module
+- use the commande `pytr dl_docs *path`
+- import the `account_transactions.csv` file using `moneymanager import`
 """
 
 from __future__ import annotations
