@@ -23,7 +23,15 @@ from moneymanager import (
     filter_helper,
 )
 from moneymanager.autogroup import prompt_automatic_grouping
-from moneymanager.loaders import PathsOptions, get_reader, import_transactions_export, init_cache, load_cache, save_data
+from moneymanager.loaders import (
+    PathsOptions,
+    get_reader,
+    import_transactions_export,
+    init_cache,
+    init_paths,
+    load_cache,
+    save_data,
+)
 from moneymanager.ui import (
     Columns,
     Group as RichGroup,
@@ -182,6 +190,17 @@ def common(
     Define root options, and initialize the cache.
     """
     init_cache(PathsOptions(readers, exports, rules, groups, settings), debug)
+
+
+@app.command()
+def init():
+    init_paths()
+    console.print(
+        Markdown(
+            "All the missing files have been created! "
+            "Install the defaults readers using `moneymanager reader install-defaults`, and import your first file with `moneymanager import`!"
+        )
+    )
 
 
 @app.command()

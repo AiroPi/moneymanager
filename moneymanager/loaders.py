@@ -39,7 +39,7 @@ def load_groups_config(path: Path) -> Groups:
     Loads "groups.yml".
     """
     with path.open(encoding="utf-8") as f:
-        raw_groups = yaml.safe_load(f)
+        raw_groups: Any = yaml.safe_load(f) or []
     return Groups.model_validate(raw_groups)
 
 
@@ -48,7 +48,7 @@ def load_grouping_rules_config(path: Path) -> GroupingRules:
     Loads "auto_group.yml"
     """
     with path.open(encoding="utf-8") as f:
-        grouping_rule_definitions = yaml.safe_load(f)
+        grouping_rule_definitions: Any = yaml.safe_load(f) or []
 
     return GroupingRules.model_validate(grouping_rule_definitions)
 
@@ -58,7 +58,7 @@ def load_accounts_settings_config(path: Path) -> AccountsSettings:
     Loads "accounts_settings.yml".
     """
     with path.open() as f:
-        raw = yaml.safe_load(f)
+        raw: Any = yaml.safe_load(f) or {}
     return transform(AccountsSettingsValidator.model_validate(raw))
 
 
@@ -110,6 +110,28 @@ def save_config():
                 sort_keys=False,
             )
         )
+
+
+def init_config():
+    """
+    Function to create empty config files.
+    """
+    paths = cache.paths
+    if not paths.account_settings.exists():
+        with paths.account_settings.open("w+") as f:
+            f.write(
+                "# This file contains some accounts settings. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#accounts-settings"
+            )
+    if not paths.groups.exists():
+        with paths.groups.open("w+") as f:
+            f.write(
+                "# This file contains all the groups. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#groups"
+            )
+    if not paths.rules.exists():
+        with paths.rules.open("w+") as f:
+            f.write(
+                "# This file contains the auto-groups rules. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#auto-grouping"
+            )
 
 
 # Data loaders (managed by the program) [.json files]
@@ -307,7 +329,7 @@ def import_transactions_export(path: Path) -> set[Transaction] | None:
 #         cache.already_parsed.append(str(export_path.absolute()))
 
 
-# Cache loader
+# Others
 
 
 def init_cache(paths: PathsOptions, debug_mode: bool = False):
@@ -340,3 +362,13 @@ def load_cache():
     #         console.clear()
     #     else:
     #         raise SystemExit(0)
+
+
+def init_paths():
+    """
+    Creates empty files and directories used by the app.
+    """
+    init_config()
+    cache.paths.readers.mkdir(exist_ok=True)
+    cache.paths.exports.mkdir(exist_ok=True)
+    DATA_PATH.mkdir(exist_ok=True)
