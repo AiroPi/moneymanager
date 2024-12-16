@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+# import time
+# a = time.perf_counter()
+# def timediff(value: str = "Anon"):
+#     global a
+#     print(f"{value}: {-a + (a:=time.perf_counter()):.3f}s")
+import os
+import re
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from decimal import Decimal
@@ -17,7 +24,6 @@ from moneymanager import (
 )
 from moneymanager.autogroup import prompt_automatic_grouping
 from moneymanager.loaders import PathsOptions, get_reader, import_transactions_export, init_cache, load_cache, save_data
-from moneymanager.textual_apps import ManageGroupsApp
 from moneymanager.ui import (
     Columns,
     Group as RichGroup,
@@ -54,6 +60,43 @@ BeforeOption = Annotated[
 AfterOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions prior to this date (the date itself is included)")
 ]
+
+
+def path_autocomplete(
+    file_okay: bool = True,
+    dir_okay: bool = True,
+    writable: bool = False,
+    readable: bool = True,
+    allow_dash: bool = False,
+    match_wildcard: str | None = None,
+) -> Callable[[str], list[str]]:
+    def wildcard_match(string: str, pattern: str) -> bool:
+        regex = re.escape(pattern).replace(r"\?", ".").replace(r"\*", ".*")
+        return re.fullmatch(regex, string) is not None
+
+    def completer(incomplete: str) -> list[str]:
+        items = os.listdir()
+        completions: list[str] = []
+        for item in items:
+            if (not file_okay and os.path.isfile(item)) or (not dir_okay and os.path.isdir(item)):
+                continue
+
+            if readable and not os.access(item, os.R_OK):
+                continue
+            if writable and not os.access(item, os.W_OK):
+                continue
+
+            completions.append(item)
+
+        if allow_dash:
+            completions.append("-")
+
+        if match_wildcard is not None:
+            completions = filter(lambda i: wildcard_match(i, match_wildcard), completions)  # type: ignore
+
+        return [i for i in completions if i.startswith(incomplete)]
+
+    return completer
 
 
 type CommandCb[**P, R] = Callable[P, R]
@@ -103,14 +146,35 @@ Same than `with_load()` but save at the end of the function also.
 
 @app.callback()
 def common(
-    readers: Path = typer.Option(Path("./readers"), envvar="READERS_PATH", help="Path to the readers files folder."),
-    exports: Path = typer.Option(
-        Path("./exports"), envvar="EXPORTS_PATH", help="Path to the transactions exports folder."
+    readers: Path = typer.Option(
+        Path("./readers"),
+        envvar="READERS_PATH",
+        help="Path to the readers files folder.",
+        autocompletion=path_autocomplete(),
     ),
-    rules: Path = typer.Option(Path("./auto_group.yml"), envvar="RULES_PATH", help="Path to the autogroup rules."),
-    groups: Path = typer.Option(Path("./groups.yml"), envvar="GROUPS_PATH", help="Path to the groups definitions."),
+    exports: Path = typer.Option(
+        Path("./exports"),
+        envvar="EXPORTS_PATH",
+        help="Path to the transactions exports folder.",
+        autocompletion=path_autocomplete(),
+    ),
+    rules: Path = typer.Option(
+        Path("./auto_group.yml"),
+        envvar="RULES_PATH",
+        help="Path to the autogroup rules.",
+        autocompletion=path_autocomplete(),
+    ),
+    groups: Path = typer.Option(
+        Path("./groups.yml"),
+        envvar="GROUPS_PATH",
+        help="Path to the groups definitions.",
+        autocompletion=path_autocomplete(),
+    ),
     settings: Path = typer.Option(
-        Path("./accounts_settings.yml"), envvar="SETTINGS_PATH", help="Path to the account settings."
+        Path("./accounts_settings.yml"),
+        envvar="SETTINGS_PATH",
+        help="Path to the account settings.",
+        autocompletion=path_autocomplete(),
     ),
     debug: bool = typer.Option(False, help="Show some debug values"),
 ):
@@ -131,7 +195,7 @@ def categories(
     Shows a tree view of your expenses grouped by categories.
     """
     prompt_automatic_grouping(preview=True)
-    filter = filter_helper(before, after)
+    _filter = filter_helper(before, after)
     console.print(Markdown("# By category"))
 
     categories_table = Table(show_header=True, header_style="bold", width=console.width)
@@ -148,8 +212,8 @@ def categories(
             table.add_column("nb", justify="right")
 
         for group in _groups:
-            value = sum(tr.amount for tr in filter(group.all_transactions))
-            number = len(list(filter(group.all_transactions)))
+            value = sum(tr.amount for tr in _filter(group.all_transactions))
+            number = len(list(_filter(group.all_transactions)))
             if number == 0 and not show_empty:  # value is 0 if number is 0
                 continue
 
@@ -176,9 +240,9 @@ def transactions(
     Lists all your transactions.
     """
     prompt_automatic_grouping(preview=True)
-    filter = filter_helper(before, after)
+    _filter = filter_helper(before, after)
 
-    table = transactions_table(sorted(filter(cache.transactions), key=lambda tr: tr.date))
+    table = transactions_table(sorted(_filter(cache.transactions), key=lambda tr: tr.date))
     console.print(table)
 
 
@@ -218,7 +282,7 @@ def accounts():
 @app.command(name="import")
 @with_load_and_save
 def import_(
-    path: Annotated[Path, typer.Argument(help="Path to the export(s).")],
+    path: Annotated[Path, typer.Argument(help="Path to the export(s).", autocompletion=path_autocomplete())],
     copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file. Not implemented.")] = False,
 ):
     """
@@ -260,7 +324,11 @@ def import_(
 
 
 @reader_subcommands.command(name="install-defaults")
-def reader_install_defaults(path: Path = Path("./readers")):
+def reader_install_defaults(
+    path: Annotated[
+        Path, typer.Argument(help="The directory to install the readers to.", autocompletion=path_autocomplete())
+    ] = Path("./readers"),
+):
     """
     Installs the default readers available at https://github.com/AiroPi/moneymanager/tree/master/readers.
     """
@@ -280,7 +348,10 @@ def reader_install_defaults(path: Path = Path("./readers")):
 
 @reader_subcommands.command(name="instructions")
 def reader_instructions(
-    reader_path: Annotated[Path, typer.Argument(help="The reader you want instruction from.")],
+    reader_path: Annotated[
+        Path,
+        typer.Argument(help="The reader you want instruction from.", autocompletion=path_autocomplete()),
+    ],
 ):
     """
     Gets the instructions to use a specific reader (how to make the transactions export).
@@ -340,9 +411,13 @@ def manage_groups():
 
     Be careful, this command will rewrite your config files, and thus, remove all the commented sections, etc.
     """
+    # Import is here to speedup the autocompletion, because textual takes ~0.1s to load.
+    from moneymanager.textual_apps import ManageGroupsApp
+
     app = ManageGroupsApp()
     app.run()
 
 
 if __name__ == "__main__":
-    typer.run(app)
+    # typer.run(app)
+    pass
