@@ -1,8 +1,8 @@
 """
 # Export instructions
 
-- Connect to https://boursobank.com
-- Go to https://clients.boursobank.com/operations/generate
+- Connect to [https://boursobank.com](https://boursobank.com)
+- Go to [https://clients.boursobank.com/operations/generate](https://clients.boursobank.com/operations/generate)
 - Select your account(s)
 - Select a period (can overlap with the previous exports)
 - Chose "CSV"
