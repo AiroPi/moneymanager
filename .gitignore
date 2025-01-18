@@ -10,3 +10,4 @@ accounts_settings.yml
 auto_group.yml
 groups.yml
 data/
+/compose.yaml
