@@ -1,0 +1,251 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": {
+                    "type": "grafana",
+                    "uid": "-- Grafana --"
+                },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": 2,
+    "links": [],
+    "panels": [
+        {
+            "datasource": "MoneyManager Datasources",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "barWidthFactor": 0.6,
+                        "drawStyle": "line",
+                        "fillOpacity": 0,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        },
+                        "insertNulls": false,
+                        "lineInterpolation": "stepAfter",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "auto",
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "fieldMinMax": false,
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "currencyEUR"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 11,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 2,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "displayMode": "list",
+                    "placement": "right",
+                    "showLegend": true
+                },
+                "tooltip": {
+                    "mode": "single",
+                    "sort": "none"
+                }
+            },
+            "pluginVersion": "11.4.0",
+            "targets": [
+                {
+                    "columns": [
+                        {
+                            "selector": "bank",
+                            "text": "",
+                            "type": "string"
+                        },
+                        {
+                            "selector": "amount",
+                            "text": "",
+                            "type": "number"
+                        },
+                        {
+                            "selector": "date",
+                            "text": "",
+                            "type": "timestamp"
+                        }
+                    ],
+                    "computed_columns": [],
+                    "filterExpression": "",
+                    "filters": [],
+                    "format": "timeseries",
+                    "global_query_id": "",
+                    "pagination_mode": "none",
+                    "parser": "uql",
+                    "refId": "A",
+                    "root_selector": "",
+                    "source": "url",
+                    "type": "json",
+                    "uql": "parse-json\n| project \"bank_name\", \"account_name\", \"state\", \"date\"\n| extend \"account\"=strcat(\"account_name\", ' (', \"bank_name\", ')')\n| extend \"state\"=tonumber(\"state\")\n| extend \"date\"=todatetime(\"date\")\n| where \"bank_name\" in (${banks:singlequote})\n| where \"account_name\" in (${accounts:singlequote})\n| project-away \"bank_name\", \"account_name\"\n| order by \"date\" asc\n",
+                    "url": "http://busybox:3000/transactions.json",
+                    "url_options": {
+                        "data": "",
+                        "method": "GET"
+                    }
+                }
+            ],
+            "title": "Account state",
+            "type": "timeseries"
+        }
+    ],
+    "preload": false,
+    "schemaVersion": 40,
+    "tags": [],
+    "templating": {
+        "list": [
+            {
+                "current": {
+                    "text": "All",
+                    "value": [
+                        "$__all"
+                    ]
+                },
+                "definition": "http://buxybox:3000/transactions.json",
+                "includeAll": true,
+                "multi": true,
+                "name": "banks",
+                "options": [],
+                "query": {
+                    "infinityQuery": {
+                        "columns": [
+                            {
+                                "selector": "bank_name",
+                                "text": "",
+                                "type": "string"
+                            }
+                        ],
+                        "filters": [],
+                        "format": "table",
+                        "parser": "backend",
+                        "refId": "variable",
+                        "root_selector": "",
+                        "source": "url",
+                        "type": "json",
+                        "url": "http://busybox:3000/transactions.json",
+                        "url_options": {
+                            "data": "",
+                            "method": "GET"
+                        }
+                    },
+                    "query": "http://buxybox:3000/transactions.json",
+                    "queryType": "infinity"
+                },
+                "refresh": 1,
+                "regex": "",
+                "sort": 1,
+                "type": "query"
+            },
+            {
+                "current": {
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "definition": "",
+                "includeAll": true,
+                "multi": true,
+                "name": "accounts",
+                "options": [],
+                "query": {
+                    "infinityQuery": {
+                        "columns": [
+                            {
+                                "selector": "account",
+                                "text": "",
+                                "type": "string"
+                            }
+                        ],
+                        "computed_columns": [
+                            {
+                                "selector": "bank",
+                                "text": "bank",
+                                "type": "string"
+                            }
+                        ],
+                        "filterExpression": "bank == \"$bank\"",
+                        "filters": [],
+                        "format": "table",
+                        "groq": "*[bank == \"$bank\"]{account}",
+                        "parser": "uql",
+                        "refId": "variable",
+                        "root_selector": "",
+                        "source": "url",
+                        "type": "json",
+                        "uql": "parse-json\n| project \"bank_name\", \"account_name\"\n| where \"bank_name\" in (${banks:singlequote})\n| project-away \"bank_name\"",
+                        "url": "http://busybox:3000/transactions.json",
+                        "url_options": {
+                            "data": "",
+                            "method": "GET"
+                        }
+                    },
+                    "query": "",
+                    "queryType": "infinity"
+                },
+                "refresh": 1,
+                "regex": "",
+                "sort": 1,
+                "type": "query"
+            }
+        ]
+    },
+    "time": {
+        "from": "now-2y",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Moneymanager",
+    "version": 9,
+    "weekStart": ""
+}

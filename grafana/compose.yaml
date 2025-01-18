@@ -1,0 +1,14 @@
+services:
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    ports:
+      - 80:3000
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/home/dashboards
+  buxybox:
+    image: busybox:1.35
+    volumes:
+      - ./grafana/exports:/home/static:ro
+    command: busybox httpd -f -v -p 3000 -h /home/static
