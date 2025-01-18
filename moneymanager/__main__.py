@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-# import time
-# a = time.perf_counter()
-# def timediff(value: str = "Anon"):
-#     global a
-#     print(f"{value}: {-a + (a:=time.perf_counter()):.3f}s")
 import os
 import re
 from collections.abc import Callable, Iterable
@@ -45,11 +40,15 @@ from moneymanager.ui import (
     format_amount,
     transactions_table,
 )
+from moneymanager.utils import github_download
 
 if TYPE_CHECKING:
     from moneymanager.group import Group
     from moneymanager.transaction import Transaction
 
+
+GRAFANA_PATH = Path("./grafana")
+GRAFANA_DATA_PATH = GRAFANA_PATH / "exports/"
 
 app = typer.Typer(no_args_is_help=True)
 debug_subcommands = typer.Typer(hidden=True, no_args_is_help=True)
@@ -60,7 +59,8 @@ manage_subcommands = typer.Typer(no_args_is_help=True, help="Commands to manage 
 app.add_typer(manage_subcommands, name="manage")
 update_subcommands = typer.Typer(no_args_is_help=True, help="Commands to update the database.")
 app.add_typer(update_subcommands, name="update")
-
+grafana_subcommands = typer.Typer()
+app.add_typer(grafana_subcommands, name="grafana")
 
 BeforeOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions after this date (the date itself is excluded)")
@@ -403,6 +403,56 @@ def debug_auto_group(transaction_id: str):
         result = "[green]PASSED" if grouping_rule.test_match(transaction) else "[red]FAILED"
         console.print(f"[bold]Test {i+1}/{len(cache.grouping_rules)} ({grouping_rule.group.name}): [/bold] {result}")
         console.print(Panel(Pretty(grouping_rule.rules), title="Rules"))
+
+
+@grafana_subcommands.command(name="help")
+def grafana_help():
+    console.print(
+        Markdown(
+            "Moneymanager made the choice of using **Grafana** to let you visualize your datas using graphs.\n"
+            "This way, you can include your money datas into your own Grafana (if you have one), you can easily create "
+            "your own graphs and visualize your data the way you want, and you can benefit from a very good "
+            "and intuitive interface!\n\n"
+            "Nevertheless, this needs you to launch a Grafana instance. The easiest way is using **Docker**.\n"
+            "- Run the command `moneymanager grafana setup`\n"
+            "- Install Docker if not present\n"
+            "- Start Grafana using `docker compose up`\n"
+            "- Go to [http://localhost:80](http://localhost:80)`\n"
+            "- Login using `admin`/`admin`\n"
+            "- Run the command `moneymanager grafana export` to re-export your datas if they changed\n"
+            "Further instructions will come later..."
+        )
+    )
+
+
+@grafana_subcommands.command(name="export")
+@with_load
+def grafana_export():
+    from .exporter import grapfana_transactions_exporter
+
+    console.print("Exporting data for grafana...")
+
+    if not GRAFANA_DATA_PATH.exists():
+        GRAFANA_DATA_PATH.mkdir(parents=True)
+
+    grapfana_transactions_exporter(GRAFANA_DATA_PATH / "transactions.json")
+
+
+@grafana_subcommands.command("setup")
+@with_load
+def grafana_setup():
+    if not GRAFANA_PATH.exists():
+        GRAFANA_PATH.mkdir()
+
+    console.print("Downloading grafana related resources...")
+    github_download(Path("grafana"), GRAFANA_PATH)
+
+    console.print(f"Move {GRAFANA_PATH / 'compose.yaml'} to current directory.")
+    (GRAFANA_PATH / "compose.yaml").rename(Path(".") / "compose.yaml")
+
+    grafana_export()
+
+    console.print(Markdown("Grafana setup ! Use `docker compose up` and go to [http://localhost:80](localhost:80)."))
 
 
 @update_subcommands.command(name="auto-group")
