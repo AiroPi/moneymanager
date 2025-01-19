@@ -11,6 +11,7 @@ services:
       - ./grafana/dashboards:/home/dashboards
   buxybox:
     image: busybox:1.35
+    init: true
     expose:
       - 3000
     volumes:
