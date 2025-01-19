@@ -37,7 +37,7 @@ def _github_download_from_url(url: str, repo_path: Path, destination: Path):
         if content["type"] == "file":
             _github_download_file(content["download_url"], destination / Path(content["path"]).relative_to(repo_path))
         if content["type"] == "dir":
-            (destination / Path(content["path"]).relative_to(repo_path)).mkdir()
+            (destination / Path(content["path"]).relative_to(repo_path)).mkdir(exist_ok=True)
             _github_download_from_url(content["url"], repo_path, destination)
 
 
