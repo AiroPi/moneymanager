@@ -18,10 +18,10 @@ class Transaction(BaseModel):
     id: str
     bank_name: str = Field(alias="bank")
     account_name: str = Field(alias="account")
-    amount: Decimal
+    amount: Decimal = Field(decimal_places=15)
     label: str
     date: datetime
-    fee: Decimal | None = None
+    fee: Decimal | None = Field(default=None, decimal_places=15)
     _binds: set[GroupBind] = PrivateAttr(default_factory=set)
 
     def __hash__(self) -> int:
