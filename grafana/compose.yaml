@@ -1,6 +1,8 @@
 services:
   grafana:
     image: grafana/grafana-oss:11.4.0
+    environment:
+      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
     ports: 
       - 80:3000
     volumes:
