@@ -18,7 +18,7 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 2,
+    "id": 3,
     "links": [],
     "panels": [
         {
@@ -138,6 +138,158 @@
             ],
             "title": "Account state",
             "type": "timeseries"
+        },
+        {
+            "datasource": "MoneyManager Datasources",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                            "type": "auto"
+                        },
+                        "inspect": false
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 80
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "account_name"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Account"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "bank_name"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Bank"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "date"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Date"
+                            },
+                            {
+                                "id": "unit",
+                                "value": "time: DD/MM/YYYY"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "amount"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Transaction value"
+                            },
+                            {
+                                "id": "unit",
+                                "value": "currencyEUR"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "state"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "State at date"
+                            },
+                            {
+                                "id": "unit",
+                                "value": "currencyEUR"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 11,
+                "w": 24,
+                "x": 0,
+                "y": 11
+            },
+            "id": 3,
+            "options": {
+                "cellHeight": "sm",
+                "footer": {
+                    "countRows": false,
+                    "fields": "",
+                    "reducer": [
+                        "sum"
+                    ],
+                    "show": false
+                },
+                "showHeader": true,
+                "sortBy": [
+                    {
+                        "desc": true,
+                        "displayName": "Date"
+                    }
+                ]
+            },
+            "pluginVersion": "11.4.0",
+            "targets": [
+                {
+                    "columns": [],
+                    "filters": [],
+                    "format": "table",
+                    "global_query_id": "",
+                    "parser": "uql",
+                    "refId": "A",
+                    "root_selector": "",
+                    "source": "url",
+                    "type": "json",
+                    "uql": "parse-json\n| project \"bank_name\", \"account_name\", \"date\", \"amount\", \"state\"\n| where \"bank_name\" in (${banks:singlequote})\n| where \"account_name\" in (${accounts:singlequote})\n| order by \"date\" desc",
+                    "url": "http://busybox:3000/transactions.json",
+                    "url_options": {
+                        "data": "",
+                        "method": "GET"
+                    }
+                }
+            ],
+            "title": "Transactions",
+            "type": "table"
         }
     ],
     "preload": false,
@@ -147,12 +299,14 @@
         "list": [
             {
                 "current": {
-                    "text": "All",
+                    "text": [
+                        "Crédit Mutuel"
+                    ],
                     "value": [
-                        "$__all"
+                        "Crédit Mutuel"
                     ]
                 },
-                "definition": "http://buxybox:3000/transactions.json",
+                "definition": "",
                 "includeAll": true,
                 "multi": true,
                 "name": "banks",
@@ -189,8 +343,12 @@
             },
             {
                 "current": {
-                    "text": "All",
-                    "value": "$__all"
+                    "text": [
+                        "C/C EUROCOMPTE JEUNE M SCHAULI PIERRE"
+                    ],
+                    "value": [
+                        "C/C EUROCOMPTE JEUNE M SCHAULI PIERRE"
+                    ]
                 },
                 "definition": "",
                 "includeAll": true,
@@ -246,6 +404,7 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "Moneymanager",
-    "version": 9,
+    "uid": "feaeld2lntypsaa",
+    "version": 4,
     "weekStart": ""
 }
