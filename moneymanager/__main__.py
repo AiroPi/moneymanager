@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 from urllib import request
 
 import typer
@@ -43,7 +43,7 @@ from moneymanager.ui import (
 from moneymanager.utils import github_download
 
 if TYPE_CHECKING:
-    from moneymanager.group import Group
+    from moneymanager.group import AutoGroupRuleSets, Group
     from moneymanager.transaction import Transaction
 
 
@@ -399,10 +399,13 @@ def debug_auto_group(transaction_id: str):
     console.print(Markdown(f"Testing against transaction {transaction_id}"))
     console.print(Panel(Pretty(transaction)))
 
-    for i, grouping_rule in enumerate(cache.grouping_rules):
-        result = "[green]PASSED" if grouping_rule.test_match(transaction) else "[red]FAILED"
-        console.print(f"[bold]Test {i+1}/{len(cache.grouping_rules)} ({grouping_rule.group.name}): [/bold] {result}")
-        console.print(Panel(Pretty(grouping_rule.rules), title="Rules"))
+    groups_with_rules = [g for g in cache.groups.all() if g.rules]
+    for i, group in enumerate(groups_with_rules):
+        if TYPE_CHECKING:
+            group.rules = cast(AutoGroupRuleSets, group.rules)
+        result = "[green]PASSED" if group.rules.test_match(transaction) else "[red]FAILED"
+        console.print(f"[bold]Test {i + 1}/{len(groups_with_rules)} ({group.name}): [/bold] {result}")
+        console.print(Panel(Pretty(group.rules), title="Rules"))
 
 
 @grafana_subcommands.command(name="help")
