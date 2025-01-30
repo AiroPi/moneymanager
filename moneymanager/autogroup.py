@@ -4,11 +4,10 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Literal, NamedTuple, overload
 
 from .cache import cache
-from .group import GroupBind
+from .group import Group, GroupBind
 from .ui import Confirm, Markdown, console, transactions_table
 
 if TYPE_CHECKING:
-    from .group import AutoGroupRuleSets
     from .transaction import Transaction
 
 
@@ -43,15 +42,15 @@ def prompt_automatic_grouping(
         transactions = cache.transactions
 
     groups_updated, binds_added, binds_removed = 0, 0, 0
-    for grouping_rule in cache.grouping_rules:
+    for group in cache.groups.all():
+        if not group.rules:
+            continue
         matches: set[GroupBind] = set()
         for transaction in transactions:
-            if grouping_rule.test_match(transaction):
-                matches.add(GroupBind.from_objects(transaction, grouping_rule.group, "auto"))
+            if group.rules.test_match(transaction):
+                matches.add(GroupBind.from_objects(transaction, group, "auto"))
 
-        already_added = {
-            bind for bind in grouping_rule.group.binds if bind.type == "auto" and bind.transaction in transactions
-        }
+        already_added = {bind for bind in group.binds if bind.type == "auto" and bind.transaction in transactions}
         removed = already_added - matches
         added = matches - already_added
 
@@ -61,12 +60,12 @@ def prompt_automatic_grouping(
         groups_updated += 1
         binds_added += len(added)
         binds_removed += len(removed)
-        if not preview and (bypass_confirm or _confirm_auto_group_updates(grouping_rule, added, removed)):
+        if not preview and (bypass_confirm or _confirm_auto_group_updates(group, added, removed)):
             _apply_changes(added, removed)
             _added = f"added [bold]{len(added)}[/bold] binds" if added else ""
             _removed = f"removed [bold]{len(removed)}[/bold] binds" if removed else ""
             _and = " and " if removed and added else ""
-            console.print(f"Successfully {_added}{_and}{_removed} for the group [underline]{grouping_rule.group.name}")
+            console.print(f"Successfully {_added}{_and}{_removed} for the group [underline]{group.name}")
         elif not preview:
             console.print("[bold]Aborted.")
     if preview and groups_updated:
@@ -88,14 +87,14 @@ def _apply_changes(added: set[GroupBind], removed: set[GroupBind]):
         cache.group_binds.remove(bind)
 
 
-def _confirm_auto_group_updates(grouping_rule: AutoGroupRuleSets, added: set[GroupBind], removed: set[GroupBind]):
+def _confirm_auto_group_updates(group: Group, added: set[GroupBind], removed: set[GroupBind]):
     """
     Shows a prompt to confirm the addition or suppression of auto-added groups (if the rules got updated).
     """
     if not (removed or added):
         return
 
-    console.print(f"Auto grouping detected some changes for the group [underline]{grouping_rule.group.name}!")
+    console.print(f"Auto grouping detected some changes for the group [underline]{group.name}!")
 
     if removed:
         table = transactions_table(bind.transaction for bind in removed)

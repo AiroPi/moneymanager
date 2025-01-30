@@ -2,14 +2,15 @@ import hashlib
 import importlib.util
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
-from typing import Any, TypeIs, cast
+from typing import Any, Protocol, TypeIs, cast
 
 import yaml
 from pydantic_core import from_json, to_json
 
 from .cache import cache
-from .group import GroupBinds, GroupingRules, Groups
+from .group import GroupBinds, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
 from .transaction import Transaction, Transactions
@@ -31,35 +32,50 @@ class PathsOptions:
     account_settings: Path
 
 
+type LoaderFIn = Callable[[], None]
+
+
+class LoaderFOut(Protocol):
+    def __call__(self, force_load: bool = False): ...
+
+
+def loader(cache_attr: str | None = None) -> Callable[[LoaderFIn], LoaderFOut]:
+    def inner(f: LoaderFIn) -> LoaderFOut:
+        _cache_attr = cache_attr or f.__name__.removeprefix("load_")
+
+        @wraps(f)
+        def wrapped(force_load: bool = False):
+            if not force_load and cache.is_loaded(_cache_attr):
+                return
+            f()
+
+        return wrapped
+
+    return inner
+
+
 # Config loaders (managed by the program and the user) [.yml files]
 
 
-def load_groups_config(path: Path) -> Groups:
+@loader()
+def load_groups():
     """
     Loads "groups.yml".
     """
-    with path.open(encoding="utf-8") as f:
+
+    with cache.paths.groups.open(encoding="utf-8") as f:
         raw_groups: Any = yaml.safe_load(f) or []
-    return Groups.model_validate(raw_groups)
+    cache.groups = Groups.model_validate(raw_groups)
 
 
-def load_grouping_rules_config(path: Path) -> GroupingRules:
-    """
-    Loads "auto_group.yml"
-    """
-    with path.open(encoding="utf-8") as f:
-        grouping_rule_definitions: Any = yaml.safe_load(f) or []
-
-    return GroupingRules.model_validate(grouping_rule_definitions)
-
-
-def load_accounts_settings_config(path: Path) -> AccountsSettings:
+@loader()
+def load_accounts_settings():
     """
     Loads "accounts_settings.yml".
     """
-    with path.open() as f:
+    with cache.paths.account_settings.open() as f:
         raw: Any = yaml.safe_load(f) or {}
-    return transform(AccountsSettingsValidator.model_validate(raw))
+    cache.accounts_settings = transform(AccountsSettingsValidator.model_validate(raw))
 
 
 def transform(accounts_settings: AccountsSettingsValidator):
@@ -81,10 +97,9 @@ def transform(accounts_settings: AccountsSettingsValidator):
     return AccountsSettings(aliases=aliases, initial_values=initial_values)
 
 
-def load_config():
-    cache.groups = load_groups_config(cache.paths.groups)
-    cache.grouping_rules = load_grouping_rules_config(cache.paths.rules)
-    cache.accounts_settings = load_accounts_settings_config(cache.paths.account_settings)
+def load_config(force_load: bool = False):
+    load_groups(force_load)
+    load_accounts_settings(force_load)
 
 
 def save_config():
@@ -92,18 +107,6 @@ def save_config():
         f.write(
             yaml.safe_dump(
                 cache.groups.model_dump(exclude_defaults=True, by_alias=True),
-                encoding="utf8",
-                allow_unicode=True,
-                width=120,
-                sort_keys=False,
-            )
-        )
-    with cache.paths.rules.open("wb+") as f:
-        result = cache.grouping_rules.model_dump(exclude_defaults=True, by_alias=True)
-
-        f.write(
-            yaml.safe_dump(
-                result,
                 encoding="utf8",
                 allow_unicode=True,
                 width=120,
@@ -137,6 +140,7 @@ def init_config():
 # Data loaders (managed by the program) [.json files]
 
 
+@loader()
 def load_already_parsed() -> None:
     """
     Loads "data/already_parsed.json".
@@ -149,7 +153,8 @@ def load_already_parsed() -> None:
         cache.already_parsed = from_json(f.read())
 
 
-def load_transactions_data() -> None:
+@loader()
+def load_transactions() -> None:
     """
     Loads "data/group_binds.json".
     """
@@ -161,7 +166,8 @@ def load_transactions_data() -> None:
         cache.transactions = Transactions.model_validate_json(f.read())
 
 
-def load_binds_data() -> None:
+@loader()
+def load_group_binds() -> None:
     """
     Loads "data/group_binds.json".
     Groups needs to be already loaded in cache (from the config). (Call `load_groups_config()` first)
@@ -175,14 +181,14 @@ def load_binds_data() -> None:
         cache.group_binds = GroupBinds.model_validate_json(f.read())
 
 
-def load_data():
+def load_data(force_load: bool = False):
     """
     Loads the datas from previously saved files and add them to the cache.
     `load_config(...)` needs to be called first.
     """
-    load_already_parsed()
-    load_transactions_data()
-    load_binds_data()
+    load_already_parsed(force_load)
+    load_transactions(force_load)
+    load_group_binds(force_load)
 
 
 def save_data():
@@ -203,6 +209,7 @@ def save_data():
 # Readers loader (interpreted files) [.py files]
 
 
+@loader()
 def load_readers():
     """
     Looks at all .py files in the given directory and get the Reader class from the `export()` function.
@@ -298,37 +305,6 @@ def import_transactions_export(path: Path) -> set[Transaction] | None:
     return new_transactions
 
 
-# def parse_transactions():
-#     """
-#     Reads all the files in the 'exports' folder, detects the correct Reader, and uses it to add the new Transactions
-#     into the cache.
-#     """
-
-#     for export_path in Path(cache.paths.exports).glob("*"):
-#         if str(export_path.absolute()) in cache.already_parsed:
-#             continue
-
-#         file = export_path.open("rb")
-#         reader = detect_reader(file)
-#         if not reader:
-#             file.close()
-#             print(f"No reader available for the export {export_path}")
-#             continue
-
-#         count = 0
-#         with reader as content:
-#             for transaction in content:
-#                 if transaction in cache.transactions:
-#                     continue
-#                 cache.transactions.add(transaction)
-#                 count += 1
-
-#         if count:
-#             console.print(f"Loaded [bold]{count}[/bold] new transactions from {export_path.absolute()}.")
-
-#         cache.already_parsed.append(str(export_path.absolute()))
-
-
 # Others
 
 
@@ -341,13 +317,13 @@ def init_cache(paths: PathsOptions, debug_mode: bool = False):
     cache.banks = ValuesIterDict()  # dynamically built
 
 
-def load_cache():
+def load_cache(force_load: bool = False):
     """
     Will load the config and the data in the cache.
     """
-    load_readers()
-    load_config()
-    load_data()
+    load_readers(force_load)
+    load_config(force_load)
+    load_data(force_load)
 
     # if cache.debug_mode:
     #     console.print(Markdown("# Banks"))

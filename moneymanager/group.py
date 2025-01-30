@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterable, Iterator
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -9,9 +9,6 @@ from pydantic import (
     Field,
     PrivateAttr,
     RootModel,
-    SkipValidation,
-    field_serializer,
-    field_validator,
     model_validator,
 )
 
@@ -42,6 +39,17 @@ class Groups(RootModel[list["Group"]]):
         self._mapped_groups[group.name] = group
         self._map_groups(group.subgroups)
 
+    def _recursive_iter(self, groups: Iterable[Group]) -> Generator[Group]:
+        for group in groups:
+            yield group
+            yield from self._recursive_iter(group.subgroups)
+
+    def all(self) -> Generator[Group]:
+        """
+        Iter recursively over groups and subgroups.
+        """
+        yield from self._recursive_iter(self.root)
+
     def get_group(self, name: str) -> Group | None:
         return self._mapped_groups.get(name)
 
@@ -65,7 +73,7 @@ class Groups(RootModel[list["Group"]]):
             self.remove(sub)
         if group.parent:
             group.parent.subgroups.remove(group)
-        cache.grouping_rules.root = [r for r in cache.grouping_rules if r.group != group]
+        # cache.grouping_rules.root = [r for r in cache.grouping_rules if r.group != group]
         self._mapped_groups.pop(group.name)
 
     def __getitem__(self, key: str) -> Group:
@@ -78,6 +86,7 @@ class Group(BaseModel):
     name: Annotated[str, Field(alias="group_name")]
     subgroups: list[Group] = Field(default_factory=list)
     parent: Group | None = Field(None, exclude=True)
+    rules: AutoGroupRuleSets | None = Field(default=None)
     _binds: set[GroupBind] = PrivateAttr(default_factory=set)
 
     def delete(self):
@@ -120,33 +129,10 @@ class Group(BaseModel):
         return isinstance(value, Group) and value.name == self.name
 
 
-class GroupingRules(RootModel[list["AutoGroupRuleSets"]]):
-    def __iter__(self):  # type: ignore
-        return iter(self.root)
-
-    def __len__(self):
-        return len(self.root)
-
-
-class AutoGroupRuleSets(BaseModel):
-    group: SkipValidation[Group]  # validation made by _bind_group
-    rules: list[Rule]
-
-    @field_validator("group", mode="before")
-    @classmethod
-    def _bind_group(cls, v: str):
-        group = cache.groups.get_group(v)
-        if group is None:
-            raise ValueError(f"The group '{v}' was not found in groups.")
-        return group
-
-    @field_serializer("group")
-    def serialize_group(self, group: Group):
-        return group.name
-
+class AutoGroupRuleSets(RootModel[list["Rule"]]):
     def test_match(self, item: Transaction) -> bool:
         # By default, multiple rules out of a AndRule are computed as an and rule.
-        return all(rule.test(item) for rule in self.rules)
+        return all(rule.test(item) for rule in self.root)
 
 
 type Rule = Annotated[
@@ -232,10 +218,6 @@ class GroupBinds(RootModel[set["GroupBind"]]):
 
     def model_post_init(self, _: Any) -> None:
         self.link_all()
-
-    def __del__(self):
-        print("DELETED")
-        print(self)
 
 
 class GroupBind(BaseModel):
