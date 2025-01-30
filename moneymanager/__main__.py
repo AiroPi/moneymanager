@@ -302,7 +302,7 @@ def accounts():
 @with_load_and_save
 def import_(
     path: Annotated[Path, typer.Argument(help="Path to the export(s).", autocompletion=path_autocomplete())],
-    copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file. Not implemented.")] = False,
+    copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file.")] = False,
 ):
     """
     Import a bank export to your exports folder. This move the file.
@@ -318,7 +318,7 @@ def import_(
     for file_path in file_paths:
         if file_path.is_dir():
             continue
-        res = import_transactions_export(file_path)
+        res = import_transactions_export(file_path, copy)
         if res is not None:
             new_transactions.update(res)
 
@@ -360,7 +360,7 @@ def reader_install_defaults(
     for file in files:
         with request.urlopen(file["download_url"]) as response, (path / file["name"]).open("wb+") as f:  # noqa: S310
             f.write(response.read())
-        print(f"{file["name"]} downloaded successfully.")
+        print(f"{file['name']} downloaded successfully.")
 
     print("Readers downloaded successfully.")
 

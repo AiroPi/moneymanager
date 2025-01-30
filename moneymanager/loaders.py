@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
@@ -265,7 +266,7 @@ def check_output_type(output: Any) -> TypeIs[list[type[ReaderABC]]]:
 # Exports reader (read files dropped in the 'exports' folder) [any (most likely csv files)]
 
 
-def import_transactions_export(path: Path) -> set[Transaction] | None:
+def import_transactions_export(path: Path, copy: bool = False) -> set[Transaction] | None:
     file = path.open("rb")
     fingerprint = hashlib.md5(file.read()).hexdigest()  # noqa: S324
     if fingerprint in cache.already_parsed:
@@ -299,7 +300,10 @@ def import_transactions_export(path: Path) -> set[Transaction] | None:
     if path.name.startswith(fingerprint):
         new_name = cache.paths.exports / path.name
 
-    path.rename(new_name)
+    if copy:
+        shutil.copy(path, new_name)
+    else:
+        path.rename(new_name)
     cache.already_parsed.append(fingerprint)
     console.print(Markdown(f"Successfully imported the file `{path}` with **{count}** new transactions !"))
     return new_transactions
