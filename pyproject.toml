@@ -110,6 +110,3 @@ skip-magic-trailing-comma = false
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-
-[tool.ruff.lint.pyflakes]
-extend-generics = ["discord.app_commands.CommandTree"]
