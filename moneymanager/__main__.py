@@ -19,7 +19,7 @@ from moneymanager import (
 )
 from moneymanager.autogroup import prompt_automatic_grouping
 from moneymanager.loaders import (
-    PathsOptions,
+    MoneymanagerPaths,
     get_reader,
     import_transactions_export,
     init_cache,
@@ -154,34 +154,17 @@ Same than `with_load()` but save at the end of the function also.
 
 @app.callback()
 def common(
-    readers: Path = typer.Option(
-        Path("./readers"),
-        envvar="READERS_PATH",
-        help="Path to the readers files folder.",
+    ctx: typer.Context,
+    moneymanager_path: Path = typer.Option(
+        Path("."),
+        envvar="MONEYMANAGER_PATH",
+        help="Location of your moneymanager datas",
         autocompletion=path_autocomplete(),
     ),
-    exports: Path = typer.Option(
-        Path("./exports"),
-        envvar="EXPORTS_PATH",
-        help="Path to the transactions exports folder.",
-        autocompletion=path_autocomplete(),
-    ),
-    rules: Path = typer.Option(
-        Path("./auto_group.yml"),
-        envvar="RULES_PATH",
-        help="Path to the autogroup rules.",
-        autocompletion=path_autocomplete(),
-    ),
-    groups: Path = typer.Option(
-        Path("./groups.yml"),
-        envvar="GROUPS_PATH",
-        help="Path to the groups definitions.",
-        autocompletion=path_autocomplete(),
-    ),
-    settings: Path = typer.Option(
-        Path("./accounts_settings.yml"),
-        envvar="SETTINGS_PATH",
-        help="Path to the account settings.",
+    config_filename: str = typer.Option(
+        ".moneymanager",
+        envvar="MONEYMANAGER_CONFIG_FILENAME",
+        help="Name of your moneymanager config file, relative to the MoneyManager path.",
         autocompletion=path_autocomplete(),
     ),
     debug: bool = typer.Option(False, help="Show some debug values"),
@@ -189,17 +172,25 @@ def common(
     """
     Define root options, and initialize the cache.
     """
-    init_cache(PathsOptions(readers, exports, rules, groups, settings), debug)
+    paths = MoneymanagerPaths(moneymanager_path, config_filename)
+    if ctx.invoked_subcommand != "init" and not paths.config.exists():
+        console.print(
+            "[bold red]ERROR :[/] you are not in a MoneyManager directory! "
+            "Please either go to your MoneyManager directory, or set the [green]MONEYMANAGER_PATH[/] environ variable, "
+            "or specify the MoneyManager path using [magenta]--moneymanager_path[/], "
+            "or initialize MoneyManager here using [magenta]moneymanager init[/]\n\n"
+            "Check the documentation for more informations: https://todo.com",
+        )
+        raise SystemExit(1)
+    init_cache(paths, debug)
 
 
 @app.command()
 def init():
     init_paths()
     console.print(
-        Markdown(
-            "All the missing files have been created! "
-            "Install the defaults readers using `moneymanager reader install-defaults`, and import your first file with `moneymanager import`!"
-        )
+        "All the missing files have been created! "
+        "Install the defaults readers using [magenta]moneymanager reader install-defaults[/], and import your first file with [magenta]moneymanager import[/]!"
     )
 
 

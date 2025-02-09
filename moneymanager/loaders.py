@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import os
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from typing import Any, Protocol, TypeIs, cast
 
 import yaml
 from pydantic_core import from_json, to_json
+
+from moneymanager.config import MoneymanagerConfig
 
 from .cache import cache
 from .group import GroupBinds, Groups
@@ -25,12 +28,34 @@ GROUP_BINDS = DATA_PATH / "group_binds.json"
 
 
 @dataclass
-class PathsOptions:
-    readers: Path
-    exports: Path
-    rules: Path
-    groups: Path
-    account_settings: Path
+class MoneymanagerPaths:
+    moneymanager_base_path: Path
+
+    config_filename: str
+    readers_dirname: str = "readers"
+    exports_direname: str = "exports"
+    groups_filename: str = "groups.yml"
+    account_settings_filename: str = "account_settings.yml"
+
+    @property
+    def config(self) -> Path:
+        return self.moneymanager_base_path / self.config_filename
+
+    @property
+    def readers(self) -> Path:
+        return self.moneymanager_base_path / self.readers_dirname
+
+    @property
+    def exports(self) -> Path:
+        return self.moneymanager_base_path / self.exports_direname
+
+    @property
+    def groups(self) -> Path:
+        return self.moneymanager_base_path / self.groups_filename
+
+    @property
+    def account_settings(self) -> Path:
+        return self.moneymanager_base_path / self.account_settings_filename
 
 
 type LoaderFIn = Callable[[], None]
@@ -63,10 +88,8 @@ def load_groups():
     """
     Loads "groups.yml".
     """
-
-    with cache.paths.groups.open(encoding="utf-8") as f:
-        raw_groups: Any = yaml.safe_load(f) or []
-    cache.groups = Groups.model_validate(raw_groups)
+    raw = yaml_load(cache.paths.groups, [])
+    cache.groups = Groups.model_validate(raw)
 
 
 @loader()
@@ -74,8 +97,7 @@ def load_accounts_settings():
     """
     Loads "accounts_settings.yml".
     """
-    with cache.paths.account_settings.open() as f:
-        raw: Any = yaml.safe_load(f) or {}
+    raw = yaml_load(cache.paths.account_settings, {})
     cache.accounts_settings = transform(AccountsSettingsValidator.model_validate(raw))
 
 
@@ -130,11 +152,6 @@ def init_config():
         with paths.groups.open("w+") as f:
             f.write(
                 "# This file contains all the groups. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#groups"
-            )
-    if not paths.rules.exists():
-        with paths.rules.open("w+") as f:
-            f.write(
-                "# This file contains the auto-groups rules. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#auto-grouping"
             )
 
 
@@ -312,13 +329,30 @@ def import_transactions_export(path: Path, copy: bool = False) -> set[Transactio
 # Others
 
 
-def init_cache(paths: PathsOptions, debug_mode: bool = False):
+def init_cache(paths: MoneymanagerPaths, debug_mode: bool = False):
     """
     Init the cache with default values and values from the environ variables / command arguments.
     """
-    cache.paths = paths
+    cache.paths = load_paths(paths)
     cache.debug_mode = debug_mode
     cache.banks = ValuesIterDict()  # dynamically built
+
+
+def load_paths[T: MoneymanagerPaths](paths: T) -> T:
+    raw = yaml_load(paths.config, {})
+    config = MoneymanagerConfig.model_validate(raw)
+
+    # TODO: maybe think of a better way to handle this, in order to reduce repetitions ?
+    if v := (config.account_settings_filename or os.environ.get("MONEYMANAGER_ACCOUNT_SETTINGS_FILENAME")):
+        paths.account_settings_filename = v
+    if v := (config.readers_dirname or os.environ.get("MONEYMANAGER_READERS_DIRNAME")):
+        paths.readers_dirname = v
+    if v := (config.groups_filename or os.environ.get("MONEYMANAGER_GROUPS_FILENAME")):
+        paths.groups_filename = v
+    if v := (config.exports_direname or os.environ.get("MONEYMANAGER_EXPORTS_DIRENAME")):
+        paths.exports_direname = v
+
+    return paths
 
 
 def load_cache(force_load: bool = False):
@@ -349,6 +383,14 @@ def init_paths():
     Creates empty files and directories used by the app.
     """
     init_config()
+    cache.paths.config.touch(exist_ok=True)
     cache.paths.readers.mkdir(exist_ok=True)
     cache.paths.exports.mkdir(exist_ok=True)
     DATA_PATH.mkdir(exist_ok=True)
+
+
+def yaml_load[T](path: Path, default: T) -> T:
+    if path.exists():
+        with path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or default
+    return default
