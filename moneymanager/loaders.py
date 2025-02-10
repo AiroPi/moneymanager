@@ -24,9 +24,13 @@ from .utils import ValuesIterDict
 
 @dataclass
 class MoneymanagerPaths:
-    moneymanager_base_path: Path
+    """
+    Store all the paths used by MoneyManager. Must be configurable using environ variable or the config file.
+    """
 
+    moneymanager_base_path: Path
     config_filename: str
+
     data_dirname: str = "data"
     readers_dirname: str = "readers"
     exports_direname: str = "exports"
@@ -360,23 +364,25 @@ def init_cache(paths: MoneymanagerPaths, debug_mode: bool = False):
 
 
 def load_paths[T: MoneymanagerPaths](paths: T) -> T:
+    """
+    Read the config file & the environ variables and set the paths used by the app.
+    """
     raw = yaml_load(paths.config, {})
     config = MoneymanagerConfig.model_validate(raw)
 
-    # TODO: maybe think of a better way to handle this, in order to reduce repetitions ?
-    if v := (config.account_settings_filename or os.environ.get("MONEYMANAGER_ACCOUNT_SETTINGS_FILENAME")):
-        paths.account_settings_filename = v
-    if v := (config.readers_dirname or os.environ.get("MONEYMANAGER_READERS_DIRNAME")):
-        paths.readers_dirname = v
-    if v := (config.groups_filename or os.environ.get("MONEYMANAGER_GROUPS_FILENAME")):
-        paths.groups_filename = v
-    if v := (config.exports_dirname or os.environ.get("MONEYMANAGER_EXPORTS_DIRENAME")):
-        paths.exports_direname = v
+    keys = (
+        "account_settings_filename",
+        "readers_dirname",
+        "exports_dirname",
+        "groups_filename",
+        "data_dirname",
+    )
+    for key in keys:
+        if v := (getattr(config, key) or os.environ.get(f"MONEYMANAGER_{key.upper()}")):
+            setattr(paths, key, v)
     if v := (config.grafana_dirname or os.environ.get("MONEYMANAGER_GRAFANA_DIRNAME")):
         # TODO: grafana dirname can't be changed for now.
         console.print("[yellow]WARNING:[/] grafana directory name can't be changed for now. Setting is ignored.")
-    if v := (config.data_dirname or os.environ.get("MONEYMANAGER_DATA_DIRNAME")):
-        paths.data_dirname = v
 
     return paths
 
