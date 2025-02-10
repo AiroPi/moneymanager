@@ -27,7 +27,7 @@ from ..ui import (
     format_amount,
     transactions_table,
 )
-from .cli_utils import path_autocomplete, with_load, with_load_and_save
+from .cli_utils import AfterOption, BeforeOption, path_autocomplete, with_load, with_load_and_save
 from .debug import debug_subcommands
 from .grafana import grafana_subcommands
 from .manage import manage_subcommands
@@ -37,7 +37,6 @@ from .update import update_subcommands
 if TYPE_CHECKING:
     from ..group import Group
     from ..transaction import Transaction
-    from .cli_utils import AfterOption, BeforeOption
 
 
 app = typer.Typer(no_args_is_help=True)
