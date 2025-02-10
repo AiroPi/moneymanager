@@ -36,6 +36,7 @@ class MoneymanagerPaths:
     exports_direname: str = "exports"
     groups_filename: str = "groups.yml"
     account_settings_filename: str = "account_settings.yml"
+    grafana_dirname: str = "grafana"
 
     @property
     def config(self) -> Path:
@@ -56,6 +57,10 @@ class MoneymanagerPaths:
     @property
     def account_settings(self) -> Path:
         return self.moneymanager_base_path / self.account_settings_filename
+
+    @property
+    def grafana(self) -> Path:
+        return self.moneymanager_base_path / self.grafana_dirname
 
 
 type LoaderFIn = Callable[[], None]
@@ -351,6 +356,9 @@ def load_paths[T: MoneymanagerPaths](paths: T) -> T:
         paths.groups_filename = v
     if v := (config.exports_direname or os.environ.get("MONEYMANAGER_EXPORTS_DIRENAME")):
         paths.exports_direname = v
+    if v := (config.grafana_dirname or os.environ.get("MONEYMANAGER_GRAFANA_DIRNAME")):
+        # TODO: grafana dirname can't be changed for now.
+        console.print("[yellow]WARNING:[/] grafana directory name can't be changed for now. Setting is ignored.")
 
     return paths
 

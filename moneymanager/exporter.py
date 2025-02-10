@@ -5,7 +5,7 @@ import polars as pl
 from .cache import cache
 
 
-def grapfana_transactions_exporter(path: Path):
+def grafana_transactions_exporter(path: Path):
     df = pl.DataFrame(tr for tr in cache.transactions)
     df = df.with_columns((df["amount"] * 100).cast(int))
     df = df.with_columns((df["fee"] * 100).cast(int))

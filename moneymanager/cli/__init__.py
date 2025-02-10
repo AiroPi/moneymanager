@@ -43,9 +43,6 @@ if TYPE_CHECKING:
     from moneymanager.transaction import Transaction
 
 
-GRAFANA_PATH = Path("./grafana")  # TODO: use config
-GRAFANA_DATA_PATH = GRAFANA_PATH / "exports/"
-
 app = typer.Typer(no_args_is_help=True)
 app.add_typer(debug_subcommands, name="debug", help="Debug commands.")
 app.add_typer(reader_subcommands, name="reader")

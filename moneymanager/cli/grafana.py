@@ -4,6 +4,7 @@ from pathlib import Path
 
 import typer
 
+from moneymanager import cache
 from moneymanager.cli.cli_utils import with_load
 from moneymanager.ui import (
     Markdown,
@@ -37,14 +38,16 @@ def grafana_help():
 @grafana_subcommands.command(name="export")
 @with_load
 def grafana_export():
-    from moneymanager.exporter import grapfana_transactions_exporter
+    from moneymanager.exporter import grafana_transactions_exporter
 
     console.print("Exporting data for grafana...")
 
-    if not GRAFANA_DATA_PATH.exists():
-        GRAFANA_DATA_PATH.mkdir(parents=True)
+    grafana_exports_directory = cache.paths.grafana / "exports/"
 
-    grapfana_transactions_exporter(GRAFANA_DATA_PATH / "transactions.json")
+    if not grafana_exports_directory.exists():
+        grafana_exports_directory.mkdir(parents=True)
+
+    grafana_transactions_exporter(grafana_exports_directory / "transactions.json")
 
 
 @grafana_subcommands.command("setup")
@@ -53,15 +56,19 @@ def grafana_setup():
     """
     Setup grafana to use it with MoneyManager and see your datas.
     """
-    if not GRAFANA_PATH.exists():
-        GRAFANA_PATH.mkdir()
+    if not cache.paths.grafana.exists():
+        cache.paths.grafana.mkdir()
 
     console.print("Downloading grafana related resources...")
-    github_download(Path("grafana"), GRAFANA_PATH)
+    github_download(Path("grafana"), cache.paths.grafana)
 
-    console.print(f"Move {GRAFANA_PATH / 'compose.yaml'} to current directory.")
-    (GRAFANA_PATH / "compose.yaml").rename(Path(".") / "compose.yaml")
+    console.print(f"Move {cache.paths.grafana / 'compose.yaml'} to current directory.")
+    (cache.paths.grafana / "compose.yaml").rename(cache.paths.moneymanager_base_path / "compose.yaml")
 
     grafana_export()
 
-    console.print(Markdown("Grafana setup ! Use `docker compose up` and go to [http://localhost:80](localhost:80)."))
+    console.print(
+        "Grafana setup! "
+        "Please go into your MoneyManager directory and use the command "
+        "[magenta]docker compose up[/] and go to [link=http://localhost:80]http://localhost:80[/]."
+    )
