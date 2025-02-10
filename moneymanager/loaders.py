@@ -370,7 +370,7 @@ def load_paths[T: MoneymanagerPaths](paths: T) -> T:
         paths.readers_dirname = v
     if v := (config.groups_filename or os.environ.get("MONEYMANAGER_GROUPS_FILENAME")):
         paths.groups_filename = v
-    if v := (config.exports_direname or os.environ.get("MONEYMANAGER_EXPORTS_DIRENAME")):
+    if v := (config.exports_dirname or os.environ.get("MONEYMANAGER_EXPORTS_DIRENAME")):
         paths.exports_direname = v
     if v := (config.grafana_dirname or os.environ.get("MONEYMANAGER_GRAFANA_DIRNAME")):
         # TODO: grafana dirname can't be changed for now.
