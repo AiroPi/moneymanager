@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
+from trogon.typer import init_tui
 
 from moneymanager.errors import MissingConfigFile
 
@@ -47,6 +48,7 @@ app.add_typer(reader_subcommands, name="reader")
 app.add_typer(manage_subcommands, name="manage")
 app.add_typer(update_subcommands, name="update")
 app.add_typer(grafana_subcommands, name="grafana")
+init_tui(app)
 
 
 @app.callback()

@@ -139,7 +139,7 @@ wheels = [
 
 [[package]]
 name = "moneymanager"
-version = "0.0.13"
+version = "0.0.14"
 source = { editable = "." }
 dependencies = [
     { name = "polars" },
@@ -147,6 +147,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
     { name = "textual" },
+    { name = "trogon" },
     { name = "typer" },
 ]
 
@@ -166,6 +167,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "textual", specifier = ">=0.89.1" },
+    { name = "trogon", specifier = ">=0.6.0" },
     { name = "typer", specifier = ">=0.15.1" },
 ]
 
@@ -435,6 +437,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9b/bf/88041224a87804774d321e2b0caaf38b4705fcf62d7c272d1bb8c2d18e80/tox_uv-1.23.0.tar.gz", hash = "sha256:37b32014b5e0154f275f0868d05c666454accee1acb839da02901009dfbe2702", size = 19440 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/68/f6/f9cf2584e3b19b5b3523147b257aee54f039e48888e5f883147952d5570c/tox_uv-1.23.0-py3-none-any.whl", hash = "sha256:5ca40a3d2fe52c5c0ab4dd639309d8763d9ff5665a00fec6a1299f437b9b612f", size = 14941 },
+]
+
+[[package]]
+name = "trogon"
+version = "0.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "textual" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/ae/7367acac2194a215b092ba3fccde3b558272702110b8bb9bea164ab4ac42/trogon-0.6.0.tar.gz", hash = "sha256:fd1abfeb7b15d79d6e6cfc9e724aad2a2728812e4713a744d975f133e7ec73a4", size = 22902 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/30/33035d5796a3b8b9624997fec7545e3febd2268c7b48df38a715a95cb5e4/trogon-0.6.0-py3-none-any.whl", hash = "sha256:fb5b6c25acd7a0eaba8d2cd32a57f1d80c26413cea737dad7a4eebcda56060e0", size = 26077 },
 ]
 
 [[package]]
