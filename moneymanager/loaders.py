@@ -1,16 +1,20 @@
+from __future__ import annotations
+
 import hashlib
 import importlib.util
+import os
 import shutil
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
 from functools import wraps
 from pathlib import Path
-from typing import Any, Protocol, TypeIs, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeIs, cast
 
 import yaml
 from pydantic_core import from_json, to_json
 
 from .cache import cache
+from .config import MoneymanagerConfig
+from .errors import MissingConfigFile
 from .group import GroupBinds, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
@@ -18,19 +22,175 @@ from .transaction import Transaction, Transactions
 from .ui import Markdown, console
 from .utils import ValuesIterDict
 
-DATA_PATH = Path("./data")
-TRANSACTIONS_PATH = DATA_PATH / "transactions.json"
-ALREADY_PARSED_PATH = DATA_PATH / "already_parsed_exports.json"
-GROUP_BINDS = DATA_PATH / "group_binds.json"
+# Paths loaders
 
 
-@dataclass
-class PathsOptions:
-    readers: Path
-    exports: Path
-    rules: Path
-    groups: Path
-    account_settings: Path
+def path_property(type: Literal["dir", "file"]):
+    def inner(f: Callable[[MoneymanagerPaths], Path]) -> Path:
+        def resolver(self: MoneymanagerPaths):
+            if self.is_resolved is False:
+                raise ValueError("MoneymanagerPaths is not resolved yet.")
+            return self.moneymanager_path / getattr(self, f"{f.__name__}_{type}name")
+
+        return property(resolver)  # type: ignore
+
+    return inner
+
+
+class MoneymanagerPaths:
+    """
+    Store all the paths used by MoneyManager. Must be configurable using environ variable or the config file.
+    """
+
+    def __init__(self, path: Path | None, config_filename: str | None, init_command: bool = False):
+        self._init_command = init_command
+        self._resolved = False
+        self._moneymanager_path: Path | None = path
+        self._config_filename: str | None = config_filename
+        self._config_resolved_path: Path | None = None
+
+        self.resolve_paths()
+
+    def resolve_paths(self):
+        if self._moneymanager_path is None:
+            self.resolve_moneymanager_path()
+
+        self.resolve_config_path()
+
+        config = load_core_config(self.config)
+        self.resolve_general_paths(config)
+
+        self._resolved = True
+
+    def resolve_moneymanager_path(self):
+        """
+        This function will set the base path according to the following rules:
+        - if the `--path` option is set, it takes the precedence over all other parameters
+        - otherwise, if `MONEYMANAGER_PATH` environ variable is not defined, it defaults to the current working
+        directory
+        - otherwise, if `MONEYMANAGER_PATH` environ variable is set, but there is a moneymanager config file in the
+        current working directory, then the current working directory is used.
+        - otherwise, the `MONEYMANAGER_PATH` environ variable path is used as path.
+        """
+        if not (env := os.getenv("MONEYMANAGER_PATH")):
+            self._moneymanager_path = Path(".")
+        else:
+            try:
+                self.discover_config(Path("."))
+            except MissingConfigFile:
+                self._moneymanager_path = Path(env)
+            else:
+                self._moneymanager_path = Path(".")
+
+    def resolve_config_path(self):
+        if TYPE_CHECKING:
+            assert isinstance(self._moneymanager_path, Path)
+
+        try:
+            self._config_path = self.discover_config(self._moneymanager_path)
+        except MissingConfigFile:
+            if not self._init_command:
+                raise
+            self._config_path = self._moneymanager_path / ".moneymanager"
+
+    def discover_config(self, path: Path) -> Path:
+        """
+        Look for a config file in the given path. The rules used to discover the config file are:
+        - if `--config` option is set, it will check for a {path}/{config} file and fail if not present (nb: `--config`
+        option will also be set if the env variable `MONEYMANAGER_CONFIG_FILENAME` is defined.)
+        - otherwise, it will looks for files in the following order:
+            - `.moneymanager`
+            - `.moneymanager.yml`
+            - `.moneymanager.yaml`
+            - `moneymanager.yml`
+            - `moneymanager.yaml`
+        - if none of the previous file is found, this raises a MissingConfigFile error.
+        """
+
+        def find_existing(files: Iterable[Path]) -> Path | None:
+            return next(filter(os.path.exists, files), None)
+
+        if self._config_filename is not None:
+            filenames = (path / self._config_filename,)
+        else:
+            filenames = tuple(
+                path / fn
+                for fn in (
+                    ".moneymanager",
+                    ".moneymanager.yaml",
+                    ".moneymanager.yml",
+                    "moneymanager.yaml",
+                    "moneymanager.yml",
+                )
+            )
+
+        if not (res := find_existing(filenames)):
+            raise MissingConfigFile(filenames)
+        return res
+
+    def resolve_general_paths(self, config: MoneymanagerConfig):
+        self.data_dirname: str = config.data_dirname or os.getenv("MONEYMANAGER_DATA_DIRNAME") or "data"
+        self.readers_dirname: str = config.readers_dirname or os.getenv("MONEYMANAGER_READERS_DIRNAME") or "readers"
+        self.exports_dirname: str = config.exports_dirname or os.getenv("MONEYMANAGER_EXPORTS_DIRNAME") or "exports"
+        self.grafana_dirname: str = "grafana"
+        self.groups_filename: str = config.groups_filename or os.getenv("MONEYMANAGER_GROUPS_FILENAME") or "groups.yml"
+        self.account_settings_filename: str = (
+            config.account_settings_filename
+            or os.getenv("MONEYMANAGER_ACCOUNT_SETTINGS_FILENAME")
+            or "account_settings.yml"
+        )
+
+        if config.grafana_dirname or os.getenv("MONEYMANAGER_GRAFANA_DIRNAME"):
+            # TODO: grafana dirname can't be changed for now.
+            console.print("[yellow]WARNING:[/] grafana directory name can't be changed for now. Setting is ignored.")
+
+    @property
+    def is_resolved(self):
+        return self._resolved
+
+    @property
+    def moneymanager_path(self) -> Path:
+        if self._moneymanager_path is None:
+            raise ValueError("The function MoneymanagerPaths.resolve_paths should be called first.")
+        return self._moneymanager_path
+
+    @property
+    def config(self) -> Path:
+        return self._config_path
+
+    @path_property("dir")
+    def readers(self) -> Path: ...
+
+    @path_property("dir")
+    def exports(self) -> Path: ...
+
+    @path_property("file")
+    def groups(self) -> Path: ...
+
+    @path_property("file")
+    def account_settings(self) -> Path: ...
+
+    @path_property("dir")
+    def grafana(self) -> Path: ...
+
+    @path_property("dir")
+    def data(self) -> Path: ...
+
+    @property
+    def grafana_exports(self) -> Path:
+        return self.grafana / "exports"
+
+    @property
+    def transactions(self) -> Path:
+        return self.data / "transactions.json"
+
+    @property
+    def already_parsed(self) -> Path:
+        return self.data / "already_parsed_exports.json"
+
+    @property
+    def group_binds(self) -> Path:
+        return self.data / "group_binds.json"
 
 
 type LoaderFIn = Callable[[], None]
@@ -63,10 +223,8 @@ def load_groups():
     """
     Loads "groups.yml".
     """
-
-    with cache.paths.groups.open(encoding="utf-8") as f:
-        raw_groups: Any = yaml.safe_load(f) or []
-    cache.groups = Groups.model_validate(raw_groups)
+    raw = yaml_load(cache.paths.groups, [])
+    cache.groups = Groups.model_validate(raw)
 
 
 @loader()
@@ -74,8 +232,7 @@ def load_accounts_settings():
     """
     Loads "accounts_settings.yml".
     """
-    with cache.paths.account_settings.open() as f:
-        raw: Any = yaml.safe_load(f) or {}
+    raw = yaml_load(cache.paths.account_settings, {})
     cache.accounts_settings = transform(AccountsSettingsValidator.model_validate(raw))
 
 
@@ -131,11 +288,6 @@ def init_config():
             f.write(
                 "# This file contains all the groups. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#groups"
             )
-    if not paths.rules.exists():
-        with paths.rules.open("w+") as f:
-            f.write(
-                "# This file contains the auto-groups rules. Check the documentation for details: https://github.com/AiroPi/moneymanager/master/readme.md#auto-grouping"
-            )
 
 
 # Data loaders (managed by the program) [.json files]
@@ -146,11 +298,11 @@ def load_already_parsed() -> None:
     """
     Loads "data/already_parsed.json".
     """
-    if not ALREADY_PARSED_PATH.exists():
+    if not cache.paths.already_parsed.exists():
         cache.already_parsed = []
         return
 
-    with ALREADY_PARSED_PATH.open("rb") as f:
+    with cache.paths.already_parsed.open("rb") as f:
         cache.already_parsed = from_json(f.read())
 
 
@@ -159,11 +311,11 @@ def load_transactions() -> None:
     """
     Loads "data/group_binds.json".
     """
-    if not TRANSACTIONS_PATH.exists():
+    if not cache.paths.transactions.exists():
         cache.transactions = Transactions(set())
         return
 
-    with TRANSACTIONS_PATH.open(encoding="utf-8") as f:
+    with cache.paths.transactions.open(encoding="utf-8") as f:
         cache.transactions = Transactions.model_validate_json(f.read())
 
 
@@ -174,11 +326,11 @@ def load_group_binds() -> None:
     Groups needs to be already loaded in cache (from the config). (Call `load_groups_config()` first)
     Transactions needs to be already loaded in cache (from the data). (Call `load_transactions_data()` first)
     """
-    if not GROUP_BINDS.exists():
+    if not cache.paths.group_binds.exists():
         cache.group_binds = GroupBinds(set())
         return
 
-    with GROUP_BINDS.open("rb") as f:
+    with cache.paths.group_binds.open("rb") as f:
         cache.group_binds = GroupBinds.model_validate_json(f.read())
 
 
@@ -196,14 +348,14 @@ def save_data():
     """
     Save the datas from the cache into json files.
     """
-    if not DATA_PATH.exists():
-        DATA_PATH.mkdir()
+    if not cache.paths.data.exists():
+        cache.paths.data.mkdir()
 
-    with TRANSACTIONS_PATH.open("wb+") as f:
+    with cache.paths.transactions.open("wb+") as f:
         f.write(to_json(cache.transactions, by_alias=True))
-    with ALREADY_PARSED_PATH.open("wb+") as f:
+    with cache.paths.already_parsed.open("wb+") as f:
         f.write(to_json(cache.already_parsed))
-    with GROUP_BINDS.open("wb+") as f:
+    with cache.paths.group_binds.open("wb+") as f:
         f.write(to_json(cache.group_binds))
 
 
@@ -312,7 +464,7 @@ def import_transactions_export(path: Path, copy: bool = False) -> set[Transactio
 # Others
 
 
-def init_cache(paths: PathsOptions, debug_mode: bool = False):
+def init_cache(paths: MoneymanagerPaths, debug_mode: bool = False):
     """
     Init the cache with default values and values from the environ variables / command arguments.
     """
@@ -348,7 +500,29 @@ def init_paths():
     """
     Creates empty files and directories used by the app.
     """
+    if not cache.paths.moneymanager_path.exists():
+        console.print(
+            f"[red]ERROR:[/] the directory {cache.paths.moneymanager_path} doesn't exist. Please create it before going"
+            " further."
+        )
+        raise SystemExit(1)
     init_config()
+    cache.paths.config.touch(exist_ok=True)
     cache.paths.readers.mkdir(exist_ok=True)
     cache.paths.exports.mkdir(exist_ok=True)
-    DATA_PATH.mkdir(exist_ok=True)
+    cache.paths.data.mkdir(exist_ok=True)
+
+
+def load_core_config(path: Path):
+    """
+    Read the moneymanager config file.
+    """
+    raw = yaml_load(path, {})
+    return MoneymanagerConfig.model_validate(raw)
+
+
+def yaml_load[T](path: Path, default: T) -> T:
+    if path.exists():
+        with path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or default
+    return default

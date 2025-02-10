@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Never, Self
 if TYPE_CHECKING:
     from .account import Bank
     from .group import GroupBinds, Groups
-    from .loaders import PathsOptions
+    from .loaders import MoneymanagerPaths
     from .reader import ReaderABC
     from .settings import AccountsSettings
     from .transaction import Transactions
@@ -27,7 +27,7 @@ class Cache:
     """
 
     instance: Self | None = None
-    paths: PathsOptions = _unloaded
+    paths: MoneymanagerPaths = _unloaded
     groups: Groups = _unloaded
     accounts_settings: AccountsSettings = _unloaded
     transactions: Transactions = _unloaded
