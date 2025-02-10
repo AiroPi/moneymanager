@@ -61,7 +61,7 @@ def grafana_setup():
     github_download(Path("grafana"), cache.paths.grafana)
 
     console.print(f"Move {cache.paths.grafana / 'compose.yaml'} to current directory.")
-    (cache.paths.grafana / "compose.yaml").rename(cache.paths.moneymanager_base_path / "compose.yaml")
+    (cache.paths.grafana / "compose.yaml").rename(cache.paths.moneymanager_path / "compose.yaml")
 
     grafana_export()
 

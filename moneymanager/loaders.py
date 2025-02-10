@@ -1,18 +1,20 @@
+from __future__ import annotations
+
 import hashlib
 import importlib.util
 import os
 import shutil
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
 from functools import wraps
 from pathlib import Path
-from typing import Any, Protocol, TypeIs, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeIs, cast
 
 import yaml
 from pydantic_core import from_json, to_json
 
 from .cache import cache
 from .config import MoneymanagerConfig
+from .errors import MissingConfigFile
 from .group import GroupBinds, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
@@ -20,54 +22,163 @@ from .transaction import Transaction, Transactions
 from .ui import Markdown, console
 from .utils import ValuesIterDict
 
+# Paths loaders
 
-@dataclass
+
+def path_property(type: Literal["dir", "file"]):
+    def inner(f: Callable[[MoneymanagerPaths], Path]) -> Path:
+        def resolver(self: MoneymanagerPaths):
+            if self.is_resolved is False:
+                raise ValueError("MoneymanagerPaths is not resolved yet.")
+            return self.moneymanager_path / getattr(self, f"{f.__name__}_{type}name")
+
+        return property(resolver)  # type: ignore
+
+    return inner
+
+
 class MoneymanagerPaths:
     """
     Store all the paths used by MoneyManager. Must be configurable using environ variable or the config file.
     """
 
-    moneymanager_base_path: Path
-    config_filename: str
+    def __init__(self, path: Path | None, config_filename: str | None, init_command: bool = False):
+        self._init_command = init_command
+        self._resolved = False
+        self._moneymanager_path: Path | None = path
+        self._config_filename: str | None = config_filename
+        self._config_resolved_path: Path | None = None
 
-    data_dirname: str = "data"
-    readers_dirname: str = "readers"
-    exports_direname: str = "exports"
-    groups_filename: str = "groups.yml"
-    account_settings_filename: str = "account_settings.yml"
-    grafana_dirname: str = "grafana"
+        self.resolve_paths()
+
+    def resolve_paths(self):
+        if self._moneymanager_path is None:
+            self.resolve_moneymanager_path()
+
+        self.resolve_config_path()
+
+        config = load_core_config(self.config)
+        self.resolve_general_paths(config)
+
+        self._resolved = True
+
+    def resolve_moneymanager_path(self):
+        """
+        This function will set the base path according to the following rules:
+        - if the `--path` option is set, it takes the precedence over all other parameters
+        - otherwise, if `MONEYMANAGER_PATH` environ variable is not defined, it defaults to the current working
+        directory
+        - otherwise, if `MONEYMANAGER_PATH` environ variable is set, but there is a moneymanager config file in the
+        current working directory, then the current working directory is used.
+        - otherwise, the `MONEYMANAGER_PATH` environ variable path is used as path.
+        """
+        if not (env := os.getenv("MONEYMANAGER_PATH")):
+            self._moneymanager_path = Path(".")
+        else:
+            try:
+                self.discover_config(Path("."))
+            except MissingConfigFile:
+                self._moneymanager_path = Path(env)
+            else:
+                self._moneymanager_path = Path(".")
+
+    def resolve_config_path(self):
+        if TYPE_CHECKING:
+            assert isinstance(self._moneymanager_path, Path)
+
+        try:
+            self._config_path = self.discover_config(self._moneymanager_path)
+        except MissingConfigFile:
+            if not self._init_command:
+                raise
+            self._config_path = self._moneymanager_path / ".moneymanager"
+
+    def discover_config(self, path: Path) -> Path:
+        """
+        Look for a config file in the given path. The rules used to discover the config file are:
+        - if `--config` option is set, it will check for a {path}/{config} file and fail if not present (nb: `--config`
+        option will also be set if the env variable `MONEYMANAGER_CONFIG_FILENAME` is defined.)
+        - otherwise, it will looks for files in the following order:
+            - `.moneymanager`
+            - `.moneymanager.yml`
+            - `.moneymanager.yaml`
+            - `moneymanager.yml`
+            - `moneymanager.yaml`
+        - if none of the previous file is found, this raises a MissingConfigFile error.
+        """
+
+        def find_existing(files: Iterable[Path]) -> Path | None:
+            return next(filter(os.path.exists, files), None)
+
+        if self._config_filename is not None:
+            filenames = (path / self._config_filename,)
+        else:
+            filenames = tuple(
+                path / fn
+                for fn in (
+                    ".moneymanager",
+                    ".moneymanager.yaml",
+                    ".moneymanager.yml",
+                    "moneymanager.yaml",
+                    "moneymanager.yml",
+                )
+            )
+
+        if not (res := find_existing(filenames)):
+            raise MissingConfigFile(filenames)
+        return res
+
+    def resolve_general_paths(self, config: MoneymanagerConfig):
+        self.data_dirname: str = config.data_dirname or os.getenv("MONEYMANAGER_DATA_DIRNAME") or "data"
+        self.readers_dirname: str = config.readers_dirname or os.getenv("MONEYMANAGER_READERS_DIRNAME") or "readers"
+        self.exports_dirname: str = config.exports_dirname or os.getenv("MONEYMANAGER_EXPORTS_DIRNAME") or "exports"
+        self.grafana_dirname: str = "grafana"
+        self.groups_filename: str = config.groups_filename or os.getenv("MONEYMANAGER_GROUPS_FILENAME") or "groups.yml"
+        self.account_settings_filename: str = (
+            config.account_settings_filename
+            or os.getenv("MONEYMANAGER_ACCOUNT_SETTINGS_FILENAME")
+            or "account_settings.yml"
+        )
+
+        if config.grafana_dirname or os.getenv("MONEYMANAGER_GRAFANA_DIRNAME"):
+            # TODO: grafana dirname can't be changed for now.
+            console.print("[yellow]WARNING:[/] grafana directory name can't be changed for now. Setting is ignored.")
+
+    @property
+    def is_resolved(self):
+        return self._resolved
+
+    @property
+    def moneymanager_path(self) -> Path:
+        if self._moneymanager_path is None:
+            raise ValueError("The function MoneymanagerPaths.resolve_paths should be called first.")
+        return self._moneymanager_path
 
     @property
     def config(self) -> Path:
-        return self.moneymanager_base_path / self.config_filename
+        return self._config_path
 
-    @property
-    def readers(self) -> Path:
-        return self.moneymanager_base_path / self.readers_dirname
+    @path_property("dir")
+    def readers(self) -> Path: ...
 
-    @property
-    def exports(self) -> Path:
-        return self.moneymanager_base_path / self.exports_direname
+    @path_property("dir")
+    def exports(self) -> Path: ...
 
-    @property
-    def groups(self) -> Path:
-        return self.moneymanager_base_path / self.groups_filename
+    @path_property("file")
+    def groups(self) -> Path: ...
 
-    @property
-    def account_settings(self) -> Path:
-        return self.moneymanager_base_path / self.account_settings_filename
+    @path_property("file")
+    def account_settings(self) -> Path: ...
 
-    @property
-    def grafana(self) -> Path:
-        return self.moneymanager_base_path / self.grafana_dirname
+    @path_property("dir")
+    def grafana(self) -> Path: ...
+
+    @path_property("dir")
+    def data(self) -> Path: ...
 
     @property
     def grafana_exports(self) -> Path:
         return self.grafana / "exports"
-
-    @property
-    def data(self) -> Path:
-        return self.moneymanager_base_path / self.data_dirname
 
     @property
     def transactions(self) -> Path:
@@ -357,33 +468,9 @@ def init_cache(paths: MoneymanagerPaths, debug_mode: bool = False):
     """
     Init the cache with default values and values from the environ variables / command arguments.
     """
-    cache.paths = load_paths(paths)
+    cache.paths = paths
     cache.debug_mode = debug_mode
     cache.banks = ValuesIterDict()  # dynamically built
-
-
-def load_paths[T: MoneymanagerPaths](paths: T) -> T:
-    """
-    Read the config file & the environ variables and set the paths used by the app.
-    """
-    raw = yaml_load(paths.config, {})
-    config = MoneymanagerConfig.model_validate(raw)
-
-    keys = (
-        "account_settings_filename",
-        "readers_dirname",
-        "exports_dirname",
-        "groups_filename",
-        "data_dirname",
-    )
-    for key in keys:
-        if v := (getattr(config, key) or os.environ.get(f"MONEYMANAGER_{key.upper()}")):
-            setattr(paths, key, v)
-    if v := (config.grafana_dirname or os.environ.get("MONEYMANAGER_GRAFANA_DIRNAME")):
-        # TODO: grafana dirname can't be changed for now.
-        console.print("[yellow]WARNING:[/] grafana directory name can't be changed for now. Setting is ignored.")
-
-    return paths
 
 
 def load_cache(force_load: bool = False):
@@ -413,11 +500,25 @@ def init_paths():
     """
     Creates empty files and directories used by the app.
     """
+    if not cache.paths.moneymanager_path.exists():
+        console.print(
+            f"[red]ERROR:[/] the directory {cache.paths.moneymanager_path} doesn't exist. Please create it before going"
+            " further."
+        )
+        raise SystemExit(1)
     init_config()
     cache.paths.config.touch(exist_ok=True)
     cache.paths.readers.mkdir(exist_ok=True)
     cache.paths.exports.mkdir(exist_ok=True)
     cache.paths.data.mkdir(exist_ok=True)
+
+
+def load_core_config(path: Path):
+    """
+    Read the moneymanager config file.
+    """
+    raw = yaml_load(path, {})
+    return MoneymanagerConfig.model_validate(raw)
 
 
 def yaml_load[T](path: Path, default: T) -> T:

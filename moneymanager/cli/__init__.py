@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Annotated
 
 import typer
 
+from moneymanager.errors import MissingConfigFile
+
 from ..autogroup import prompt_automatic_grouping
 from ..cache import cache
 from ..filters import filter_helper
@@ -50,33 +52,44 @@ app.add_typer(grafana_subcommands, name="grafana")
 @app.callback()
 def common(
     ctx: typer.Context,
-    moneymanager_path: Path = typer.Option(
-        Path("."),
-        envvar="MONEYMANAGER_PATH",
-        help="Location of your moneymanager datas",
+    moneymanager_path: Path | None = typer.Option(
+        None,
+        "--path",
+        "-p",
+        help="Location of your moneymanager datas.",
         autocompletion=path_autocomplete(),
+        show_default=False,
     ),
-    config_filename: str = typer.Option(
-        ".moneymanager",
+    config_filename: str | None = typer.Option(
+        None,
+        "--config",
+        "-c",
         envvar="MONEYMANAGER_CONFIG_FILENAME",
         help="Name of your moneymanager config file, relative to the MoneyManager path.",
         autocompletion=path_autocomplete(),
+        show_default=False,
+        show_envvar=False,
     ),
     debug: bool = typer.Option(False, help="Show some debug values"),
 ):
     """
     Define root options, and initialize the cache.
     """
-    paths = MoneymanagerPaths(moneymanager_path, config_filename)
-    if ctx.invoked_subcommand != "init" and not paths.config.exists():
-        console.print(
-            "[bold red]ERROR :[/] you are not in a MoneyManager directory! "
-            "Please either go to your MoneyManager directory, or set the [green]MONEYMANAGER_PATH[/] environ variable, "
-            "or specify the MoneyManager path using [magenta]--moneymanager_path[/], "
-            "or initialize MoneyManager here using [magenta]moneymanager init[/]\n\n"
-            "Check the documentation for more informations: https://todo.com",
-        )
-        raise SystemExit(1)
+    if ctx.invoked_subcommand == "init":
+        paths = MoneymanagerPaths(moneymanager_path, config_filename, init_command=True)
+    else:
+        try:
+            paths = MoneymanagerPaths(moneymanager_path, config_filename)
+        except MissingConfigFile as e:
+            console.print(
+                "[bold red]ERROR :[/] you are not in a MoneyManager directory! "
+                "Please either go to your MoneyManager directory, or set the [green]MONEYMANAGER_PATH[/] environ variable, "
+                "or specify the MoneyManager path using [magenta]--path[/], "
+                "or initialize MoneyManager here using [magenta]moneymanager init[/]\n\n"
+                "Check the documentation for more informations: https://todo.com\n\n",
+                f"Missing file: [blue]{'[/] or [blue]'.join(map(str, e.paths))}[/]",
+            )
+            raise SystemExit(1)
     init_cache(paths, debug)
 
 
