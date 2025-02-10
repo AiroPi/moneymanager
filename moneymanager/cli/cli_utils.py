@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 import typer
 
-from moneymanager.loaders import (
+from ..loaders import (
     load_cache,
     save_data,
 )

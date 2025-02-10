@@ -1,8 +1,7 @@
 import typer
 
-from moneymanager.autogroup import prompt_automatic_grouping
-from moneymanager.ui import console
-
+from ..autogroup import prompt_automatic_grouping
+from ..ui import console
 from .cli_utils import with_load_and_save
 
 update_subcommands = typer.Typer(no_args_is_help=True, help="Commands to update the database.")

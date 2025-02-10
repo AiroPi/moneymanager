@@ -11,9 +11,8 @@ from typing import Any, Protocol, TypeIs, cast
 import yaml
 from pydantic_core import from_json, to_json
 
-from moneymanager.config import MoneymanagerConfig
-
 from .cache import cache
+from .config import MoneymanagerConfig
 from .group import GroupBinds, Groups
 from .reader import ReaderABC, detect_reader
 from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT

@@ -7,19 +7,16 @@ from typing import TYPE_CHECKING, Annotated
 
 import typer
 
-from moneymanager import (
-    cache,
-    filter_helper,
-)
-from moneymanager.autogroup import prompt_automatic_grouping
-from moneymanager.cli.cli_utils import path_autocomplete, with_load, with_load_and_save
-from moneymanager.loaders import (
+from ..autogroup import prompt_automatic_grouping
+from ..cache import cache
+from ..filters import filter_helper
+from ..loaders import (
     MoneymanagerPaths,
     import_transactions_export,
     init_cache,
     init_paths,
 )
-from moneymanager.ui import (
+from ..ui import (
     Columns,
     Group as RichGroup,
     Markdown,
@@ -30,7 +27,7 @@ from moneymanager.ui import (
     format_amount,
     transactions_table,
 )
-
+from .cli_utils import path_autocomplete, with_load, with_load_and_save
 from .debug import debug_subcommands
 from .grafana import grafana_subcommands
 from .manage import manage_subcommands
@@ -38,9 +35,9 @@ from .reader import reader_subcommands
 from .update import update_subcommands
 
 if TYPE_CHECKING:
-    from moneymanager.cli.cli_utils import AfterOption, BeforeOption
-    from moneymanager.group import Group
-    from moneymanager.transaction import Transaction
+    from ..group import Group
+    from ..transaction import Transaction
+    from .cli_utils import AfterOption, BeforeOption
 
 
 app = typer.Typer(no_args_is_help=True)

@@ -5,9 +5,8 @@ from urllib import request
 import typer
 from pydantic_core import from_json
 
-from moneymanager.loaders import get_reader
-from moneymanager.ui import Markdown, console
-
+from ..loaders import get_reader
+from ..ui import Markdown, console
 from .cli_utils import path_autocomplete
 
 reader_subcommands = typer.Typer(no_args_is_help=True, help="Commands related to readers.")

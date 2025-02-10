@@ -4,13 +4,13 @@ from pathlib import Path
 
 import typer
 
-from moneymanager import cache
-from moneymanager.cli.cli_utils import with_load
-from moneymanager.ui import (
+from ..cache import cache
+from ..cli.cli_utils import with_load
+from ..ui import (
     Markdown,
     console,
 )
-from moneymanager.utils import github_download
+from ..utils import github_download
 
 grafana_subcommands = typer.Typer()
 

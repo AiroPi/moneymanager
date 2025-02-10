@@ -4,19 +4,19 @@ from typing import TYPE_CHECKING, cast
 
 import typer
 
-from moneymanager import (
-    cache,
-)
-from moneymanager.cli.cli_utils import with_load
-from moneymanager.ui import (
+from ..cli.cli_utils import with_load
+from ..ui import (
     Markdown,
     Panel,
     Pretty,
     console,
 )
+from . import (
+    cache,
+)
 
 if TYPE_CHECKING:
-    from moneymanager.group import AutoGroupRuleSets
+    from ..group import AutoGroupRuleSets
 
 
 debug_subcommands = typer.Typer(hidden=True, no_args_is_help=True)
