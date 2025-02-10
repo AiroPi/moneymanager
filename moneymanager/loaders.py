@@ -21,17 +21,13 @@ from .transaction import Transaction, Transactions
 from .ui import Markdown, console
 from .utils import ValuesIterDict
 
-DATA_PATH = Path("./data")
-TRANSACTIONS_PATH = DATA_PATH / "transactions.json"
-ALREADY_PARSED_PATH = DATA_PATH / "already_parsed_exports.json"
-GROUP_BINDS = DATA_PATH / "group_binds.json"
-
 
 @dataclass
 class MoneymanagerPaths:
     moneymanager_base_path: Path
 
     config_filename: str
+    data_dirname: str = "data"
     readers_dirname: str = "readers"
     exports_direname: str = "exports"
     groups_filename: str = "groups.yml"
@@ -61,6 +57,26 @@ class MoneymanagerPaths:
     @property
     def grafana(self) -> Path:
         return self.moneymanager_base_path / self.grafana_dirname
+
+    @property
+    def grafana_exports(self) -> Path:
+        return self.grafana / "exports"
+
+    @property
+    def data(self) -> Path:
+        return self.moneymanager_base_path / self.data_dirname
+
+    @property
+    def transactions(self) -> Path:
+        return self.data / "transactions.json"
+
+    @property
+    def already_parsed(self) -> Path:
+        return self.data / "already_parsed_exports.json"
+
+    @property
+    def group_binds(self) -> Path:
+        return self.data / "group_binds.json"
 
 
 type LoaderFIn = Callable[[], None]
@@ -168,11 +184,11 @@ def load_already_parsed() -> None:
     """
     Loads "data/already_parsed.json".
     """
-    if not ALREADY_PARSED_PATH.exists():
+    if not cache.paths.already_parsed.exists():
         cache.already_parsed = []
         return
 
-    with ALREADY_PARSED_PATH.open("rb") as f:
+    with cache.paths.already_parsed.open("rb") as f:
         cache.already_parsed = from_json(f.read())
 
 
@@ -181,11 +197,11 @@ def load_transactions() -> None:
     """
     Loads "data/group_binds.json".
     """
-    if not TRANSACTIONS_PATH.exists():
+    if not cache.paths.transactions.exists():
         cache.transactions = Transactions(set())
         return
 
-    with TRANSACTIONS_PATH.open(encoding="utf-8") as f:
+    with cache.paths.transactions.open(encoding="utf-8") as f:
         cache.transactions = Transactions.model_validate_json(f.read())
 
 
@@ -196,11 +212,11 @@ def load_group_binds() -> None:
     Groups needs to be already loaded in cache (from the config). (Call `load_groups_config()` first)
     Transactions needs to be already loaded in cache (from the data). (Call `load_transactions_data()` first)
     """
-    if not GROUP_BINDS.exists():
+    if not cache.paths.group_binds.exists():
         cache.group_binds = GroupBinds(set())
         return
 
-    with GROUP_BINDS.open("rb") as f:
+    with cache.paths.group_binds.open("rb") as f:
         cache.group_binds = GroupBinds.model_validate_json(f.read())
 
 
@@ -218,14 +234,14 @@ def save_data():
     """
     Save the datas from the cache into json files.
     """
-    if not DATA_PATH.exists():
-        DATA_PATH.mkdir()
+    if not cache.paths.data.exists():
+        cache.paths.data.mkdir()
 
-    with TRANSACTIONS_PATH.open("wb+") as f:
+    with cache.paths.transactions.open("wb+") as f:
         f.write(to_json(cache.transactions, by_alias=True))
-    with ALREADY_PARSED_PATH.open("wb+") as f:
+    with cache.paths.already_parsed.open("wb+") as f:
         f.write(to_json(cache.already_parsed))
-    with GROUP_BINDS.open("wb+") as f:
+    with cache.paths.group_binds.open("wb+") as f:
         f.write(to_json(cache.group_binds))
 
 
@@ -359,6 +375,8 @@ def load_paths[T: MoneymanagerPaths](paths: T) -> T:
     if v := (config.grafana_dirname or os.environ.get("MONEYMANAGER_GRAFANA_DIRNAME")):
         # TODO: grafana dirname can't be changed for now.
         console.print("[yellow]WARNING:[/] grafana directory name can't be changed for now. Setting is ignored.")
+    if v := (config.data_dirname or os.environ.get("MONEYMANAGER_DATA_DIRNAME")):
+        paths.data_dirname = v
 
     return paths
 
@@ -394,7 +412,7 @@ def init_paths():
     cache.paths.config.touch(exist_ok=True)
     cache.paths.readers.mkdir(exist_ok=True)
     cache.paths.exports.mkdir(exist_ok=True)
-    DATA_PATH.mkdir(exist_ok=True)
+    cache.paths.data.mkdir(exist_ok=True)
 
 
 def yaml_load[T](path: Path, default: T) -> T:

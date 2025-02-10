@@ -42,12 +42,10 @@ def grafana_export():
 
     console.print("Exporting data for grafana...")
 
-    grafana_exports_directory = cache.paths.grafana / "exports/"
+    if not cache.paths.grafana_exports.exists():
+        cache.paths.grafana_exports.mkdir(parents=True)
 
-    if not grafana_exports_directory.exists():
-        grafana_exports_directory.mkdir(parents=True)
-
-    grafana_transactions_exporter(grafana_exports_directory / "transactions.json")
+    grafana_transactions_exporter(cache.paths.grafana_exports / "transactions.json")
 
 
 @grafana_subcommands.command("setup")
