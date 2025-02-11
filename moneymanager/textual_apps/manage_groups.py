@@ -46,8 +46,14 @@ class GroupTree(Tree[Group]):
             return
         result = await self.app.push_screen_wait(RenameGroupModal(self.cursor_node.data.name))
         if result is not None:  # and await self.app.push_screen_wait(ConfirmModal("Are you sure you want to rename?")):
+            try:
+                self.cursor_node.data.rename(result)
+            except ValueError:
+                self.notify(
+                    f"A group with the name {result} already exists!", title="Can't rename the group", severity="error"
+                )
+                return
             self.cursor_node.set_label(result)
-            self.cursor_node.data.rename(result)
             cast(ManageGroupsApp, self.app).unsaved_changes = True
 
     @work
@@ -75,8 +81,16 @@ class GroupTree(Tree[Group]):
         name = await self.app.push_screen_wait(CreateGroupModal())
         if name is None:
             return
-        group = cache.groups.create(name, parent=self.cursor_node.parent.data)
+        try:
+            group = cache.groups.create(name, parent=self.cursor_node.parent.data)
+        except ValueError:
+            self.notify(
+                f"A group with the name {name} already exists!", title="Can't rename the group", severity="error"
+            )
+            return
+
         self.cursor_node.parent.add(group.name, group, before=self.cursor_node).add_leaf("[i]+ New subgroup...", None)
+        cast(ManageGroupsApp, self.app).unsaved_changes = True
 
     def action_expand(self):
         if self.cursor_node is None:
@@ -165,7 +179,6 @@ class ManageGroupsApp(App[None]):
     CSS_PATH = "manage_groups.tcss"
     BINDINGS: ClassVar = [
         Binding("ctrl+s", "save()", "Save changes"),
-        Binding("ctrl+c", "exit()", "Exit the app", show=False),
     ]
 
     def __init__(self):
@@ -182,7 +195,7 @@ class ManageGroupsApp(App[None]):
         self.unsaved_changes = False
 
     @work
-    async def action_exit(self):
+    async def action_quit(self):  # type: ignore
         if self.unsaved_changes and await self.app.push_screen_wait(ConfirmModal("Save the changes?", "Save", "Abort")):
             self.action_save()
         self.app.exit()

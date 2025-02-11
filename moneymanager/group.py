@@ -19,25 +19,29 @@ if TYPE_CHECKING:
 
 
 class Groups(RootModel[list["Group"]]):
-    _mapped_groups: dict[str, Group] = PrivateAttr(default_factory=dict)
+    _map: dict[str, Group] = PrivateAttr(default_factory=dict)
 
     def __iter__(self):  # type: ignore
         return iter(self.root)
 
     @model_validator(mode="after")
-    def _check_double(self) -> Self:
-        self._map_groups(self.root)
+    def _init_map(self) -> Self:
+        self._map_group(self.root)
         return self
 
-    def _map_groups(self, groups: list[Group]):
-        for group in groups:
-            if group.name in self._mapped_groups:
-                raise ValueError(f"Duplicate group {group.name}")
-            self._map(group)
+    def _map_group(self, groups: Group | Iterable[Group]):
+        """
+        Add a map between the group name to the Group to allow O(1) access by name.
+        Also map all the subgroups if any.
+        """
+        if isinstance(groups, Group):
+            groups = (groups,)
 
-    def _map(self, group: Group):
-        self._mapped_groups[group.name] = group
-        self._map_groups(group.subgroups)
+        for group in groups:
+            if group.name in self._map:
+                raise ValueError(f"Duplicate group {group.name}")
+            self._map[group.name] = group
+            self._map_group(group.subgroups)
 
     def _recursive_iter(self, groups: Iterable[Group]) -> Generator[Group]:
         for group in groups:
@@ -50,34 +54,57 @@ class Groups(RootModel[list["Group"]]):
         """
         yield from self._recursive_iter(self.root)
 
-    def get_group(self, name: str) -> Group | None:
-        return self._mapped_groups.get(name)
+    def __getitem__(self, key: str) -> Group:
+        return self._map[key]
 
-    def update_group_mapping(self, old_name: str, group: Group):
-        self._mapped_groups.pop(old_name)
-        self._mapped_groups[group.name] = group
+    def get(self, name: str) -> Group | None:
+        """
+        Get a group by name in O(1).
+        """
+        return self._map.get(name)
 
     def create(self, name: str, parent: Group | None = None):
-        if name in self._mapped_groups:
+        """
+        Create a new group, by giving a name and a optionally a parent.
+        """
+        if name in self._map:
             raise ValueError("You can't have 2 groups with the same name!")
         group = Group(name=name, parent=parent)
-        self._map(group)
+        self._map_group(group)
         if parent:
             parent.subgroups.append(group)
+        else:
+            self.root.append(group)
         return group
 
     def remove(self, group: Group):
+        """
+        Delete a group. Also remove all the associated binds.
+        Repeat recursively for each subgroups.
+        """
         for bind in group.binds.copy():
             cache.group_binds.remove(bind)
         for sub in group.subgroups.copy():
             self.remove(sub)
         if group.parent:
             group.parent.subgroups.remove(group)
-        # cache.grouping_rules.root = [r for r in cache.grouping_rules if r.group != group]
-        self._mapped_groups.pop(group.name)
+        else:
+            self.root.remove(group)
+        self._map.pop(group.name)
 
-    def __getitem__(self, key: str) -> Group:
-        return self._mapped_groups[key]
+    def rename_group(self, group: Group, new_name: str):
+        """
+        Rename a group.
+        """
+        if new_name in self._map:
+            raise ValueError(f"Can't rename: name already exist for {new_name}")
+
+        self._map.pop(group.name)  # unmap the group
+        group.name = new_name  # rename the group
+        self._map[group.name] = group  # remap the group
+
+        for bind in group.binds:
+            bind.group_name = new_name
 
 
 class Group(BaseModel):
@@ -93,11 +120,7 @@ class Group(BaseModel):
         cache.groups.remove(self)
 
     def rename(self, name: str):
-        old_name = self.name
-        self.name = name
-        for bind in self.binds:
-            bind.group_name = name
-        cache.groups.update_group_mapping(old_name, self)
+        cache.groups.rename_group(self, name)
 
     def model_post_init(self, _: Any) -> None:
         for group in self.subgroups:
@@ -131,7 +154,7 @@ class Group(BaseModel):
 
 class AutoGroupRuleSets(RootModel[list["Rule"]]):
     def test_match(self, item: Transaction) -> bool:
-        # By default, multiple rules out of a AndRule are computed as an and rule.
+        # By default, multiple rules out of an AndRule are computed as an AndRule.
         return all(rule.test(item) for rule in self.root)
 
 
