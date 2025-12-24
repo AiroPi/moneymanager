@@ -20,6 +20,8 @@ BeforeOption = Annotated[
 AfterOption = Annotated[
     datetime | None, typer.Option(help="Exclude transactions prior to this date (the date itself is included)")
 ]
+FirstOption = Annotated[int | None, typer.Option(help="Only show the first n transactions. (Incompatible with --last)")]
+LastOption = Annotated[int | None, typer.Option(help="Only show the last n transactions. (Incompatible with --first)")]
 
 
 def path_autocomplete(

@@ -30,7 +30,15 @@ from ..ui import (
     format_amount,
     transactions_table,
 )
-from .cli_utils import AfterOption, BeforeOption, path_autocomplete, with_load, with_load_and_save
+from .cli_utils import (
+    AfterOption,
+    BeforeOption,
+    FirstOption,
+    LastOption,
+    path_autocomplete,
+    with_load,
+    with_load_and_save,
+)
 from .debug import debug_subcommands
 from .grafana import grafana_subcommands
 from .manage import manage_subcommands
@@ -115,7 +123,7 @@ def categories(
     Shows a tree view of your expenses grouped by categories.
     """
     prompt_automatic_grouping(preview=True)
-    _filter = filter_helper(before, after)
+    _filter = filter_helper(before=before, after=after)
     console.print(Markdown("# By category"))
 
     categories_table = Table(show_header=True, header_style="bold", width=console.width)
@@ -155,14 +163,24 @@ def categories(
 def transactions(
     before: BeforeOption = None,
     after: AfterOption = None,
+    first: FirstOption = None,
+    last: LastOption = None,
 ):
     """
     Lists all your transactions.
     """
     prompt_automatic_grouping(preview=True)
-    _filter = filter_helper(before, after)
+    if first is not None and last is not None:
+        console.print("--first and --last options are incompatibles")
+        return
+    _filter = filter_helper(
+        before=before,
+        after=after,
+        first=first,
+        last=last,
+    )
 
-    table = transactions_table(sorted(_filter(cache.transactions), key=lambda tr: tr.date))
+    table = transactions_table(_filter(cache.transactions))
     console.print(table)
 
 
