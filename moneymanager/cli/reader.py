@@ -6,6 +6,7 @@ import typer
 from pydantic_core import from_json
 
 from ..loaders import get_reader
+from ..cache import cache
 from ..ui import Markdown, console
 from .cli_utils import path_autocomplete
 
@@ -13,14 +14,11 @@ reader_subcommands = typer.Typer(no_args_is_help=True, help="Commands related to
 
 
 @reader_subcommands.command(name="install-defaults")
-def reader_install_defaults(
-    path: Annotated[
-        Path, typer.Argument(help="The directory to install the readers to.", autocompletion=path_autocomplete())
-    ] = Path("./readers"),
-):
+def reader_install_defaults():
     """
     Installs the default readers available at https://github.com/AiroPi/moneymanager/tree/master/readers.
     """
+    path = cache.paths.readers
     if not path.exists():
         path.mkdir()
 
