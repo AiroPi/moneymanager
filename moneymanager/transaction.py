@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -20,7 +20,7 @@ class Transaction(BaseModel):
     account_name: str = Field(alias="account")
     amount: Decimal = Field(decimal_places=15)
     label: str
-    date: datetime
+    date: date
     fee: Decimal | None = Field(default=None, decimal_places=15)
     _binds: set[GroupBind] = PrivateAttr(default_factory=set)
 
