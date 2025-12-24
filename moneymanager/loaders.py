@@ -137,7 +137,7 @@ class MoneymanagerPaths:
         self.account_settings_filename: str = (
             config.account_settings_filename
             or os.getenv("MONEYMANAGER_ACCOUNT_SETTINGS_FILENAME")
-            or "account_settings.yml"
+            or "accounts_settings.yml"
         )
 
         if config.grafana_dirname or os.getenv("MONEYMANAGER_GRAFANA_DIRNAME"):
