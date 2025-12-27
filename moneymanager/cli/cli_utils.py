@@ -11,6 +11,7 @@ import typer
 
 from ..loaders import (
     load_cache,
+    load_readers,
     save_data,
 )
 
@@ -82,6 +83,15 @@ def with_operation_wrappers(*, before: SimpleFunctions | None = None, after: Sim
 
     return decorator
 
+
+with_reader_load = with_operation_wrappers(before=[load_readers])
+"""
+Decorator to use on a typer command.
+Will load the readers in cache.
+
+`typer.Context` must be the first argument of the command callback.
+The decorator must be placed under the `Typer.command()` decorator (in order to be executed before).
+"""
 
 with_load = with_operation_wrappers(before=[load_cache])
 """

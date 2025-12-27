@@ -353,26 +353,33 @@ def load_readers():
     """
     readers: list[type[ReaderABC]] = []
 
-    for reader_path in (cache.paths.readers).glob("*.py"):
-        try:
-            module = get_reader(reader_path)
-        except ValueError as e:
-            print(e)
-            continue
-
-        try:
-            export: Callable[[], Any] = getattr(module, "export")
-        except AttributeError:
-            print(f"{reader_path} does not contains an 'export' function.")
-            continue
-
-        exported = export()
-        if not check_output_type(exported):
-            raise TypeError(f"{reader_path}' export function does not return a list of readers.")
-
-        readers.extend(exported)
+    for reader_path in cache.paths.readers.glob("*.py"):
+        file_readers = get_readers_from_file(reader_path)
+        if file_readers:
+            readers.extend(file_readers)
 
     cache.readers = readers
+
+
+def get_readers_from_file(reader_path: Path) -> list[type[ReaderABC]] | None:
+    try:
+        module = get_reader(reader_path)
+    except ValueError as e:
+        console.print(e, style="bold red")
+        return
+
+    try:
+        export: Callable[[], Any] = getattr(module, "export")
+    except AttributeError:
+        console.print(f"{reader_path} does not contains an 'export' function.", style="bold red")
+        return
+
+    exported = export()
+    if not check_output_type(exported):
+        console.print(f"{reader_path}' export function does not return a list of readers.", style="bold red")
+        return
+
+    return exported
 
 
 def get_reader(path: Path):
@@ -471,7 +478,6 @@ def load_cache(force_load: bool = False):
     """
     Will load the config and the data in the cache.
     """
-    load_readers(force_load)
     load_config(force_load)
     load_data(force_load)
 

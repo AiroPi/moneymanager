@@ -39,6 +39,7 @@ from .cli_utils import (
     path_autocomplete,
     with_load,
     with_load_and_save,
+    with_reader_load,
 )
 from .debug import debug_subcommands
 from .grafana import grafana_subcommands
@@ -226,6 +227,7 @@ def accounts():
 
 @app.command(name="import")
 @with_load_and_save
+@with_reader_load
 def import_(
     path: Annotated[Path, typer.Argument(help="Path to the export(s).", autocompletion=path_autocomplete())],
     copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file.")] = False,
