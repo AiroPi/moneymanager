@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -266,3 +267,54 @@ def import_(
         )
     else:
         console.print("Not any new transaction found!")
+
+
+@app.command()
+@with_load_and_save
+def migrate_credit_mutuel(
+    convert_account: Annotated[list[str], typer.Option(help="from:to convert account name")],
+    convert_bank: Annotated[str, typer.Option(help="from:to convert bank name")],
+    delete_after: Annotated[datetime, typer.Option(help="delete transactions after dd-mm-yyyy (included)")],
+) -> None:
+    old_bank, new_bank = convert_bank.split(":")
+    _convert_acc = {acc.split(":")[0]: acc.split(":")[1] for acc in convert_account}
+
+    to_delete = set["Transaction"]()
+    updated = 0
+    for tr in cache.transactions:
+        if tr.bank.name == old_bank:
+            if tr.date >= delete_after.date():
+                to_delete.add(tr)
+                continue
+            tr.account_name = _convert_acc[tr.account_name]
+            tr.bank_name = new_bank
+            updated += 1
+    cache.transactions.root.difference_update(to_delete)
+
+    console.print(f"Removed {len(to_delete)} transactions and updated {updated}")
+
+
+@app.command()
+def clean_bind_groups():
+    from json import dump, load
+    from typing import Any
+
+    from ..loaders import load_transactions
+
+    load_transactions()
+    transaction_ids = {tr.id for tr in cache.transactions}
+
+    with cache.paths.group_binds.open(encoding="utf-8") as f:
+        group_binds: list[Any] = load(f)
+
+    to_remove = list[int]()
+    for i, bind in enumerate(group_binds):
+        if bind["transaction_id"] not in transaction_ids:
+            to_remove.append(i)
+    for i in to_remove[::-1]:
+        group_binds.pop(i)
+
+    console.print(f"Removed {len(to_remove)} non-existant transaction from groups.")
+
+    with cache.paths.group_binds.open("w", encoding="utf-8") as f:
+        dump(group_binds, f)
