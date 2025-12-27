@@ -166,6 +166,8 @@ def transactions(
     after: AfterOption = None,
     first: FirstOption = None,
     last: LastOption = None,
+    show_id: Annotated[bool, typer.Option(help="Show bank & account ID instead of display name.")] = False,
+    account: Annotated[list[str] | None, typer.Option(help="Filter the account to show")] = None,
 ):
     """
     Lists all your transactions.
@@ -179,9 +181,10 @@ def transactions(
         after=after,
         first=first,
         last=last,
+        accounts=account,
     )
 
-    table = transactions_table(_filter(cache.transactions))
+    table = transactions_table(_filter(cache.transactions), show_id)
     console.print(table)
 
 

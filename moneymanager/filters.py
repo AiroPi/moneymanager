@@ -5,10 +5,15 @@ from collections.abc import Sequence
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, cast, overload
 
+from moneymanager.account import Account
+
+from .cache import cache
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
-    from datetime import datetime
+    from datetime import date, datetime
 
+    from .account import Account
     from .transaction import Transaction
 
 
@@ -27,7 +32,7 @@ class Filter(ABC):
 
 
 class BeforeFilter(Filter):
-    def __init__(self, date: datetime) -> None:
+    def __init__(self, date: date) -> None:
         self.date = date
 
     def test(self, transaction: Transaction) -> bool:
@@ -35,11 +40,27 @@ class BeforeFilter(Filter):
 
 
 class AfterFilter(Filter):
-    def __init__(self, date: datetime) -> None:
+    def __init__(self, date: date) -> None:
         self.date = date
 
     def test(self, transaction: Transaction) -> bool:
         return transaction.date >= self.date
+
+
+class AccountsFilter(Filter):
+    def __init__(self, accounts: list[str]) -> None:
+        self.accounts = set[Account]()
+        for account in accounts:
+            _acc = account.split(":")
+            if len(_acc) == 1:
+                self.accounts.update(cache.banks[_acc[0]].accounts.values())
+            elif len(_acc) == 2:
+                self.accounts.add(cache.banks[_acc[0]].accounts[_acc[1]])
+            else:
+                raise ValueError(f"Account filter {account} is incorrect.")
+
+    def test(self, transaction: Transaction) -> bool:
+        return transaction.account in self.accounts
 
 
 class SliceFilter:
@@ -75,13 +96,16 @@ def filter_helper(
     after: datetime | None = None,
     first: int | None = None,
     last: int | None = None,
+    accounts: list[str] | None = None,
 ):
     filters: list[Filter] = []
     slice_filter: None | SliceFilter = None
     if before is not None:
-        filters.append(BeforeFilter(before))
+        filters.append(BeforeFilter(before.date()))
     if after is not None:
-        filters.append(AfterFilter(after))
+        filters.append(AfterFilter(after.date()))
+    if accounts is not None:
+        filters.append(AccountsFilter(accounts=accounts))
     if first is not None:
         slice_filter = SliceFilter(first=first)
     if last is not None:
