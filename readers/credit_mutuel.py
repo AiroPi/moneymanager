@@ -19,7 +19,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from moneymanager.reader import ReaderABC, Transaction
+from moneymanager import Transaction
+from moneymanager.reader import ReaderABC
 from moneymanager.ui import (
     Markdown,
     console,

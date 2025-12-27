@@ -17,7 +17,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Self
 
-from moneymanager.reader import CSVReader, ReaderABC, Transaction
+from moneymanager import Transaction
+from moneymanager.reader import CSVReader, ReaderABC
 from moneymanager.utils import fix_string
 
 
