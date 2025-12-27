@@ -13,26 +13,24 @@ from __future__ import annotations
 
 import hashlib
 import io
-from collections.abc import Generator
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from moneymanager.reader import ReaderABC, Transaction
+from moneymanager import Transaction
+from moneymanager.reader import CSVReader
 from moneymanager.utils import fix_string
 
 if TYPE_CHECKING:
-    from moneymanager.reader import CSVReader
+    from moneymanager.reader import ReaderABC
 
 
-class SocieteGeneraleAccountExportReader(ReaderABC):
+class SocieteGeneraleAccountExportReader(CSVReader):
+    header_lines = 3
+
     def __init__(self, file: io.TextIOBase, account: str):
-        super().__init__(file, header_lines=3)
+        super().__init__(file)
         self.account = account
-
-    def generator(self, reader: CSVReader) -> Generator[Transaction]:
-        for row in reader:
-            yield self.row_parser(row)
 
     def row_parser(self, row: list[str]) -> Transaction:
         return Transaction(
@@ -84,13 +82,8 @@ class SocieteGeneraleAccountExportReader(ReaderABC):
         return None
 
 
-class SocieteGeneraleBudgetExportReader(ReaderABC):
-    def __init__(self, file: io.TextIOBase):
-        super().__init__(file, header_lines=3)
-
-    def generator(self, reader: CSVReader) -> Generator[Transaction]:
-        for row in reader:
-            yield self.row_parser(row)
+class SocieteGeneraleBudgetExportReader(CSVReader):
+    header_lines = 3
 
     def row_parser(self, row: list[str]) -> Transaction:
         return Transaction(

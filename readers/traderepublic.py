@@ -10,25 +10,21 @@ from __future__ import annotations
 
 import hashlib
 import io
-from collections.abc import Generator
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Self
 
-from moneymanager.reader import ReaderABC, Transaction
+from moneymanager import Transaction
+from moneymanager.reader import CSVReader
 from moneymanager.utils import fix_string
 
 if TYPE_CHECKING:
-    from moneymanager.reader import CSVReader
+    from moneymanager.reader import ReaderABC
 
 
-class TradeRepublicReader(ReaderABC):
-    def generator(self, reader: CSVReader) -> Generator[Transaction]:
-        for row in reader:
-            yield from self.row_parser(row)
-
-    def row_parser(self, row: list[str]) -> Generator[Transaction]:
-        yield Transaction(
+class TradeRepublicReader(CSVReader):
+    def row_parser(self, row: list[str]) -> Transaction:
+        return Transaction(
             bank="Trade Republic",
             account="Cash",
             id=self.generate_id(row),

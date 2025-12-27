@@ -13,25 +13,15 @@ from __future__ import annotations
 
 import hashlib
 import io
-from collections.abc import Generator
 from datetime import datetime
 from decimal import Decimal
+from typing import Self
 
-# from decimal import Decimal
-from typing import TYPE_CHECKING, Self
-
-from moneymanager.reader import ReaderABC, Transaction
+from moneymanager.reader import CSVReader, ReaderABC, Transaction
 from moneymanager.utils import fix_string
 
-if TYPE_CHECKING:
-    from moneymanager.reader import CSVReader
 
-
-class BoursoBankReader(ReaderABC):
-    def generator(self, reader: CSVReader) -> Generator[Transaction]:
-        for row in reader:
-            yield self.row_parser(row)
-
+class BoursoBankReader(CSVReader):
     def row_parser(self, row: list[str]) -> Transaction:
         return Transaction(
             bank=row[8],
