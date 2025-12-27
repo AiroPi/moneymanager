@@ -15,16 +15,19 @@ requires-python = ">=3.12"
 [project.scripts]
 moneymanager = "moneymanager.cli:app"
 
+[project.optional-dependencies]
+ofx = ["ofxtools"]
+
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     # "uv",
-    "pyright",
+    "basedpyright",
     "debugpy",
     "ruff",
     "tox",
@@ -32,8 +35,16 @@ dev-dependencies = [
 ]
 
 
-[tool.pyright]
+[tool.basedpyright]
 typeCheckingMode = "strict"
+exclude = [
+    "moneymanager/textual_apps/*.py",
+    "moneymanager/exporter.py",
+    ".venv",
+    "draft",
+]
+allowedUntypedLibraries = ["trogon"]
+
 
 [tool.tox]
 envlist = ["py312"]
@@ -46,7 +57,7 @@ commands = [
     #fmt
     ["ruff", "format", "--check", "moneymanager"],
     ["ruff", "check", "moneymanager"],
-    ["pyright", "moneymanager"],
+    ["basedpyright", "moneymanager"],
 ]
 
 
