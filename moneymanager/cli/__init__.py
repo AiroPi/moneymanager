@@ -206,13 +206,15 @@ def accounts():
     for bank in cache.banks:
         for account in bank.accounts:
             value = sum(Decimal(tr.amount) for tr in account.transactions)
-            value += cache.accounts_settings.initial_values.get(bank.name, {}).get(account.name, 0)
+            value += account.initial_balance
 
             total += value
 
+            _real_bank_name = f" [i]({bank.name})[/i]" if bank.display_name != bank.name else ""
+            _real_account_name = f" [i]({account.name})[/i]" if account.display_name != account.name else ""
             accounts_table.add_row(
-                bank.name,
-                cache.accounts_settings.aliases.get(bank.name, {}).get(account.name, account.name),
+                f"{bank.display_name}{_real_bank_name}",
+                f"{account.display_name}{_real_account_name}",
                 f"{value:,.2f}€",
             )
 
@@ -226,6 +228,7 @@ def accounts():
 def import_(
     path: Annotated[Path, typer.Argument(help="Path to the export(s).", autocompletion=path_autocomplete())],
     copy: Annotated[bool, typer.Option(help="Do a copy instead of moving the file.")] = False,
+    update: Annotated[bool, typer.Option(help="Update transaction label when supported.")] = False,
 ):
     """
     Import a bank export to your exports folder. This move the file.
@@ -241,7 +244,7 @@ def import_(
     for file_path in file_paths:
         if file_path.is_dir():
             continue
-        res = import_transactions_export(file_path, copy)
+        res = import_transactions_export(file_path, copy, update)
         if res is not None:
             new_transactions.update(res)
 

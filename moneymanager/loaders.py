@@ -17,7 +17,7 @@ from .config import MoneymanagerConfig
 from .errors import MissingConfigFile
 from .group import GroupBinds, Groups
 from .reader import ReaderABC, detect_reader
-from .settings import AccountsSettings, AccountsSettingsValidator, AliasesT, InitialValuesT
+from .settings import AccountsSettings
 from .transaction import Transaction, Transactions
 from .ui import Markdown, console
 from .utils import ValuesIterDict
@@ -402,7 +402,7 @@ def check_output_type(output: Any) -> TypeIs[list[type[ReaderABC]]]:
 # Exports reader (read files dropped in the 'exports' folder) [any (most likely csv files)]
 
 
-def import_transactions_export(path: Path, copy: bool = False) -> set[Transaction] | None:
+def import_transactions_export(path: Path, copy: bool = False, update: bool = False) -> set[Transaction] | None:
     file = path.open("rb")
     fingerprint = hashlib.md5(file.read()).hexdigest()  # noqa: S324
     if fingerprint in cache.already_parsed:
@@ -422,15 +422,19 @@ def import_transactions_export(path: Path, copy: bool = False) -> set[Transactio
         )
         return
 
-    count = 0
     new_transactions: set[Transaction] = set()
+    updated_transaction = 0
     with reader as content:
         for transaction in content:
             if transaction in cache.transactions:
+                if update:
+                    existing = cache.transactions[transaction.id]
+                    if existing.label != transaction.label:
+                        existing.label = transaction.label
+                        updated_transaction += 1
                 continue
             cache.transactions.add(transaction)
             new_transactions.add(transaction)
-            count += 1
 
     new_name = cache.paths.exports / f"{fingerprint} - {path.name}"
     if path.name.startswith(fingerprint):
@@ -442,7 +446,11 @@ def import_transactions_export(path: Path, copy: bool = False) -> set[Transactio
         else:
             path.rename(new_name)
     cache.already_parsed.append(fingerprint)
-    console.print(Markdown(f"Successfully imported the file `{path}` with **{count}** new transactions !"))
+    console.print(
+        Markdown(f"Successfully imported the file `{path}` with **{len(new_transactions)}** new transactions !")
+    )
+    if update:
+        console.print(Markdown(f"**{updated_transaction}** transactions updated !"))
     return new_transactions
 
 
