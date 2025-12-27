@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Literal, NamedTuple, overload
 
 from .cache import cache
+from .filters import filter_helper
 from .group import Group, GroupBind
 from .ui import Confirm, Markdown, console, transactions_table
 
@@ -96,12 +97,13 @@ def _confirm_auto_group_updates(group: Group, added: set[GroupBind], removed: se
 
     console.print(f"Auto grouping detected some changes for the group [underline]{group.name}!")
 
+    _filter = filter_helper()
     if removed:
-        table = transactions_table(bind.transaction for bind in removed)
+        table = transactions_table(_filter(bind.transaction for bind in removed))
         console.print("The following elements will be unassigned:")
         console.print(table)
     if added:
-        table = transactions_table(bind.transaction for bind in added)
+        table = transactions_table(_filter(bind.transaction for bind in added))
         console.print("The following elements will be assigned:")
         console.print(table)
 
