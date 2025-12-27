@@ -329,6 +329,9 @@ def save_data():
     """
     Save the datas from the cache into json files.
     """
+    if cache.dry_run:
+        return
+
     if not cache.paths.data.exists():
         cache.paths.data.mkdir()
 
@@ -433,10 +436,11 @@ def import_transactions_export(path: Path, copy: bool = False) -> set[Transactio
     if path.name.startswith(fingerprint):
         new_name = cache.paths.exports / path.name
 
-    if copy:
-        shutil.copy(path, new_name)
-    else:
-        path.rename(new_name)
+    if not cache.dry_run:
+        if copy:
+            shutil.copy(path, new_name)
+        else:
+            path.rename(new_name)
     cache.already_parsed.append(fingerprint)
     console.print(Markdown(f"Successfully imported the file `{path}` with **{count}** new transactions !"))
     return new_transactions
@@ -445,12 +449,13 @@ def import_transactions_export(path: Path, copy: bool = False) -> set[Transactio
 # Others
 
 
-def init_cache(paths: MoneymanagerPaths, debug_mode: bool = False):
+def init_cache(paths: MoneymanagerPaths, debug_mode: bool = False, dry_run: bool = False):
     """
     Init the cache with default values and values from the environ variables / command arguments.
     """
     cache.paths = paths
     cache.debug_mode = debug_mode
+    cache.dry_run = dry_run
     cache.banks = ValuesIterDict()  # dynamically built
 
 

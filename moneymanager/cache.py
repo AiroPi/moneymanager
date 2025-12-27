@@ -37,6 +37,7 @@ class Cache:
     readers: list[type[ReaderABC]] = _unloaded
 
     debug_mode: bool = False
+    dry_run: bool = False
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if cls.instance is None:
@@ -46,7 +47,7 @@ class Cache:
     def is_loaded(self, name: str):
         return super().__getattribute__(name) is not _unloaded
 
-    def __getattribute__(self, name: str):
+    def __getattribute__(self, name: str) -> object:
         value = super().__getattribute__(name)
         if value is _unloaded:
             raise UnloadedCacheAccess("You are trying to access a non-loaded value!")

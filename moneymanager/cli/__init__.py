@@ -81,6 +81,7 @@ def common(
         show_envvar=False,
     ),
     debug: bool = typer.Option(False, help="Show some debug values"),
+    dry_run: bool = typer.Option(False, help="Do not write data to disk"),
 ):
     """
     Define root options, and initialize the cache.
@@ -100,7 +101,7 @@ def common(
                 f"Missing file: [blue]{'[/] or [blue]'.join(map(str, e.paths))}[/]",
             )
             raise SystemExit(1)
-    init_cache(paths, debug)
+    init_cache(paths, debug, dry_run)
 
 
 @app.command()
