@@ -232,27 +232,8 @@ def load_accounts_settings():
     """
     Loads "accounts_settings.yml".
     """
-    raw = yaml_load(cache.paths.account_settings, {})
-    cache.accounts_settings = transform(AccountsSettingsValidator.model_validate(raw))
-
-
-def transform(accounts_settings: AccountsSettingsValidator):
-    """
-    Used by load_accounts_settings_config. Will be deprecated soon. TODO.
-    """
-    aliases: AliasesT = {}
-    for bank_entry in accounts_settings.aliases:
-        bank_aliases = aliases.setdefault(bank_entry.bank, {})
-        for account_alias in bank_entry.values:
-            bank_aliases[account_alias.input] = account_alias.output
-
-    initial_values: InitialValuesT = {}
-    for bank_entry in accounts_settings.initial_values:
-        bank_initial_values = initial_values.setdefault(bank_entry.bank, {})
-        for initial_value in bank_entry.values:
-            bank_initial_values[initial_value.account] = initial_value.value
-
-    return AccountsSettings(aliases=aliases, initial_values=initial_values)
+    raw = yaml_load(cache.paths.account_settings, [])
+    cache.accounts_settings = AccountsSettings.model_validate(raw)
 
 
 def load_config(force_load: bool = False):

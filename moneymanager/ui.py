@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 console = Console()
 
 
-def transactions_table(transactions: Iterable[Transaction]):
+def transactions_table(transactions: Iterable[Transaction], show_id: bool = False):
     table = Table(show_footer=True, width=console.width)
+    table.add_column("nb")
     table.add_column("date")
     table.add_column("bank")
     table.add_column("account")
@@ -31,11 +32,18 @@ def transactions_table(transactions: Iterable[Transaction]):
     table.add_column("amount", justify="right")
 
     total = 0
-    for tr in transactions:
-        table.add_row(tr.date.strftime("%Y-%m-%d"), tr.bank.name, tr.account.alias, tr.label, format_amount(tr.amount))
+    for i, tr in enumerate(transactions):
+        table.add_row(
+            str(i + 1),
+            tr.date.strftime("%Y-%m-%d"),
+            tr.bank.name if show_id else tr.bank.display_name,
+            tr.account.name if show_id else tr.account.display_name,
+            tr.label,
+            format_amount(tr.amount),
+        )
         total += tr.amount
 
-    table.columns[4].footer = format_amount(total)
+    table.columns[5].footer = format_amount(total)
 
     return table
 
